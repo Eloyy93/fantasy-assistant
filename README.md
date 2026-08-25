@@ -58,8 +58,8 @@ uvicorn fantasy_assistant.api.main:app --reload
 | Módulo 3 — Alertas | Stub, fase 3 (push vía Firebase Cloud Messaging) |
 | API REST (`fantasy_assistant/api`) | Funcionando: `/players`, `/players/{id}/prediccion`, `/devices` |
 | Bot de Telegram | `/prediccion` funcionando end-to-end; `/alineacion` y `/alertas` responden "pendiente" |
-| App Android (Flutter, `app/`) | Funcionando: buscador de jugadores + predicción, probado en emulador contra la API real |
-| Despliegue backend | `Dockerfile` + `railway.json` listos, sin desplegar (requiere cuenta Railway/Fly.io) |
+| App Android (Flutter, `app/`) | Funcionando, apuntando al backend en producción |
+| Despliegue backend | **En producción en Railway**, sincronizando datos reales cada 3h |
 | Notificaciones push (FCM) | Pendiente fase 3, junto con `modules/alerts.py` |
 
 ## App Android (Flutter)
@@ -73,18 +73,25 @@ flutter run              # con un emulador o móvil conectado
 flutter build apk        # genera build/app/outputs/flutter-apk/app-release.apk
 ```
 
-La URL del backend está en `app/lib/api_client.dart` (`kApiBaseUrl`):
-- `http://10.0.2.2:8000` funciona tal cual contra un backend local desde el
-  **emulador** Android (ya probado).
-- Para un móvil físico o el backend ya desplegado, cambia esa constante por
-  la IP LAN de tu PC o por la URL pública de Railway/Fly.io.
+La URL del backend está en `app/lib/api_client.dart` (`kApiBaseUrl`), ya
+apuntando al backend desplegado en Railway.
 
-## Desplegar el backend (Railway)
+## Backend en producción (Railway)
 
-1. `pip install -r requirements.txt` ya lo cubre todo; no hace falta nada más en el repo.
-2. Sube el repo a GitHub, conéctalo en [railway.app](https://railway.app) — detecta `railway.json` + `Dockerfile` solo.
-3. Configura en Railway las variables de entorno de `.env.example` (como mínimo `FANTASY_SOURCE`; `DATABASE_URL` puedes dejarlo, el `Dockerfile` ya monta un volumen en `/data`).
-4. El job de sincronización (`python -m fantasy_assistant.jobs.sync_data --loop`) debe correr como **servicio aparte** en Railway (mismo repo, mismo Dockerfile, pero sobrescribiendo el `CMD` por ese comando) — la API y el sync no deben compartir proceso.
+Un único servicio (`fantasy-assistant`), construido desde el `Dockerfile` de
+este repo. La API sincroniza datos ella misma al arrancar y cada 3h (ver
+`fantasy_assistant/api/main.py`, `BackgroundScheduler`) — no hay un servicio
+de sync aparte ni un Volume montado; la BD SQLite vive dentro del propio
+contenedor (`/app/data`), así que **se resetea en cada redeploy** y se
+vuelve a poblar sola en segundos.
+
+Notas del despliegue, por si hay que tocarlo de nuevo:
+- El puerto que usa uvicorn lo decide Railway vía la variable `$PORT` que
+  inyecta él mismo (no hace falta fijarla a mano) — el dominio público debe
+  apuntar a ese mismo puerto en **Settings → Networking**.
+- El **Custom Start Command** del servicio debe estar vacío para que se use
+  el `CMD` del `Dockerfile` (uvicorn). Si algún día se vuelve a poner un
+  comando de sync ahí por error, la API deja de responder (502).
 
 Para probar la imagen en local antes de desplegar (necesita Docker Desktop arrancado):
 
