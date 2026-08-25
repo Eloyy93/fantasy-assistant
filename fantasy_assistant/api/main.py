@@ -8,6 +8,9 @@ Uso local:
 """
 from __future__ import annotations
 
+import datetime as dt
+
+from apscheduler.schedulers.background import BackgroundScheduler
 from fastapi import Depends, FastAPI, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -16,14 +19,27 @@ from fantasy_assistant.api.schemas import DeviceRegisterIn, PlayerOut, Prediccio
 from fantasy_assistant.config import config
 from fantasy_assistant.db.database import SessionLocal, init_db
 from fantasy_assistant.db.models import DeviceRegistration, PlayerRecord
+from fantasy_assistant.jobs.sync_data import sync_once
 from fantasy_assistant.modules import price_predictor
 
 app = FastAPI(title="Fantasy Assistant API", version="0.1.0")
+
+# Sincroniza dentro del propio proceso de la API (en un hilo aparte, vía
+# APScheduler) en vez de depender de un segundo servicio + BD compartida:
+# más simple de desplegar, sin necesitar un Volume de Railway.
+_scheduler = BackgroundScheduler(timezone="UTC")
 
 
 @app.on_event("startup")
 def _startup() -> None:
     init_db()
+    _scheduler.add_job(sync_once, "interval", hours=3, next_run_time=dt.datetime.now(dt.timezone.utc))
+    _scheduler.start()
+
+
+@app.on_event("shutdown")
+def _shutdown() -> None:
+    _scheduler.shutdown(wait=False)
 
 
 def get_db() -> Session:
