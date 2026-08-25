@@ -1,13 +1,8 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
-/// URL base del backend Fantasy Assistant.
-///
-/// - Emulador Android: 10.0.2.2 apunta al "localhost" de tu PC.
-/// - Móvil físico en la misma red: cambia esto por la IP LAN de tu PC
-///   (ej. "http://192.168.1.50:8000"), o mejor aún, por la URL del backend
-///   ya desplegado en Railway/Fly.io cuando lo tengas.
-const String kApiBaseUrl = 'http://10.0.2.2:8000';
+/// URL base del backend Fantasy Assistant, ya desplegado en Railway.
+const String kApiBaseUrl = 'https://fantasy-assistant-production-d8fd.up.railway.app';
 
 class Player {
   final String id;
