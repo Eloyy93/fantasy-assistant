@@ -8,7 +8,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY fantasy_assistant ./fantasy_assistant
 
 ENV DATABASE_URL=sqlite:////data/fantasy_assistant.db
-VOLUME ["/data"]
 
 EXPOSE 8000
 
