@@ -79,3 +79,18 @@ class DeviceSubscription(Base):
     player_id: Mapped[str] = mapped_column(ForeignKey("players.id"), index=True)
 
     __table_args__ = (UniqueConstraint("fcm_token", "player_id", name="uq_subscription_device_player"),)
+
+
+class TeamPlayer(Base):
+    """Jugador que el usuario ha colocado en "Mi plantilla" desde la app.
+    Identificado por un device_id local generado por la app (no el token
+    FCM), para que gestionar la plantilla no dependa de tener las
+    notificaciones activadas."""
+
+    __tablename__ = "team_players"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    device_id: Mapped[str] = mapped_column(String, index=True)
+    player_id: Mapped[str] = mapped_column(ForeignKey("players.id"), index=True)
+
+    __table_args__ = (UniqueConstraint("device_id", "player_id", name="uq_team_device_player"),)

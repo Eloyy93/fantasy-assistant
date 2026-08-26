@@ -296,13 +296,43 @@ class FantasyApiClient {
     return data.cast<String>();
   }
 
-  Future<List<TeamPlayer>> getTeam(String fcmToken) async {
-    final uri = Uri.parse('$baseUrl/team').replace(queryParameters: {'fcm_token': fcmToken});
+  Future<List<TeamPlayer>> getTeam(String deviceId, {String? source}) async {
+    final uri = Uri.parse('$baseUrl/team').replace(
+      queryParameters: {'device_id': deviceId, if (source != null) 'source': source},
+    );
     final response = await http.get(uri).timeout(const Duration(seconds: 15));
     if (response.statusCode != 200) {
       throw ApiException('Error ${response.statusCode} al leer la plantilla');
     }
     final List<dynamic> data = jsonDecode(utf8.decode(response.bodyBytes));
     return data.map((e) => TeamPlayer.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  Future<void> addToTeam({required String deviceId, required String playerId}) async {
+    final uri = Uri.parse('$baseUrl/team');
+    final response = await http
+        .post(
+          uri,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'device_id': deviceId, 'player_id': playerId}),
+        )
+        .timeout(const Duration(seconds: 10));
+    if (response.statusCode >= 300) {
+      throw ApiException('Error ${response.statusCode} al añadir a la plantilla');
+    }
+  }
+
+  Future<void> removeFromTeam({required String deviceId, required String playerId}) async {
+    final uri = Uri.parse('$baseUrl/team');
+    final response = await http
+        .delete(
+          uri,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'device_id': deviceId, 'player_id': playerId}),
+        )
+        .timeout(const Duration(seconds: 10));
+    if (response.statusCode >= 300) {
+      throw ApiException('Error ${response.statusCode} al quitar de la plantilla');
+    }
   }
 }

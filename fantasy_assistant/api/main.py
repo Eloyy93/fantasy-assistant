@@ -20,12 +20,20 @@ from fantasy_assistant.api.schemas import (
     PlayerOut,
     PrediccionOut,
     SubscriptionIn,
+    TeamMemberIn,
     TeamPlayerOut,
 )
 from fantasy_assistant.config import config
 from fantasy_assistant.datasources import SOURCES, get_data_source
 from fantasy_assistant.db.database import SessionLocal, init_db
-from fantasy_assistant.db.models import DeviceRegistration, DeviceSubscription, PlayerRecord, PointsHistory, PriceHistory
+from fantasy_assistant.db.models import (
+    DeviceRegistration,
+    DeviceSubscription,
+    PlayerRecord,
+    PointsHistory,
+    PriceHistory,
+    TeamPlayer,
+)
 from fantasy_assistant.jobs.sync_data import sync_once
 from fantasy_assistant.modules import price_predictor
 from fantasy_assistant.modules.lineup_optimizer import FORMACIONES, LineupError, optimize_lineup
@@ -159,6 +167,7 @@ def register_device(payload: DeviceRegisterIn, db: Session = Depends(get_db)) ->
         existing.user_id = payload.user_id
     else:
         db.add(DeviceRegistration(fcm_token=payload.fcm_token, user_id=payload.user_id))
+    db.commit()
     return {"status": "registrado"}
 
 
@@ -175,6 +184,7 @@ def subscribe(payload: SubscriptionIn, db: Session = Depends(get_db)) -> dict:
     ).scalar_one_or_none()
     if not existente:
         db.add(DeviceSubscription(fcm_token=payload.fcm_token, player_id=payload.player_id))
+    db.commit()
     return {"status": "suscrito"}
 
 
@@ -185,6 +195,7 @@ def unsubscribe(payload: SubscriptionIn, db: Session = Depends(get_db)) -> None:
             DeviceSubscription.fcm_token == payload.fcm_token, DeviceSubscription.player_id == payload.player_id
         )
     )
+    db.commit()
 
 
 @app.get("/subscriptions", response_model=list[str])
@@ -196,22 +207,49 @@ def list_subscriptions(fcm_token: str = Query(...), db: Session = Depends(get_db
     )
 
 
+@app.post("/team", status_code=201)
+def add_to_team(payload: TeamMemberIn, db: Session = Depends(get_db)) -> dict:
+    player = db.get(PlayerRecord, payload.player_id)
+    if not player:
+        raise HTTPException(status_code=404, detail=f"Jugador '{payload.player_id}' no encontrado")
+
+    existente = db.execute(
+        select(TeamPlayer).where(TeamPlayer.device_id == payload.device_id, TeamPlayer.player_id == payload.player_id)
+    ).scalar_one_or_none()
+    if not existente:
+        db.add(TeamPlayer(device_id=payload.device_id, player_id=payload.player_id))
+    db.commit()
+    return {"status": "añadido"}
+
+
+@app.delete("/team", status_code=204)
+def remove_from_team(payload: TeamMemberIn, db: Session = Depends(get_db)) -> None:
+    db.execute(
+        TeamPlayer.__table__.delete().where(
+            TeamPlayer.device_id == payload.device_id, TeamPlayer.player_id == payload.player_id
+        )
+    )
+    db.commit()
+
+
 @app.get("/team", response_model=list[TeamPlayerOut])
-def get_team(fcm_token: str = Query(...), db: Session = Depends(get_db)) -> list[TeamPlayerOut]:
-    """Plantilla del usuario: los jugadores a los que sigue (suscrito a
-    alertas) con su variación de precio reciente y sus puntos. Reutiliza
-    las suscripciones ya existentes (módulo 3) en vez de una tabla nueva:
-    seguir a un jugador ya implica "está en mi radar/plantilla"."""
-    player_ids = db.execute(
-        select(DeviceSubscription.player_id).where(DeviceSubscription.fcm_token == fcm_token)
-    ).scalars().all()
+def get_team(
+    device_id: str = Query(...),
+    source: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+) -> list[TeamPlayerOut]:
+    """Plantilla del usuario: los jugadores que ha colocado él mismo en el
+    campo desde la app (independiente de las notificaciones push), con su
+    variación de precio reciente y sus puntos."""
+    stmt = select(TeamPlayer.player_id).where(TeamPlayer.device_id == device_id)
+    player_ids = db.execute(stmt).scalars().all()
     if not player_ids:
         return []
 
     resultado: list[TeamPlayerOut] = []
     for player_id in player_ids:
         player = db.get(PlayerRecord, player_id)
-        if not player:
+        if not player or (source and player.source != source):
             continue
 
         precios = db.execute(

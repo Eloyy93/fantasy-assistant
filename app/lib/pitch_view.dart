@@ -104,6 +104,149 @@ class PitchView extends StatelessWidget {
   }
 }
 
+/// Igual que [PitchView] pero para la plantilla del usuario ([TeamPlayer]):
+/// los jugadores que ha colocado él mismo, agrupados por posición.
+class TeamPitchView extends StatelessWidget {
+  final List<TeamPlayer> jugadores;
+  final void Function(TeamPlayer)? onTapPlayer;
+
+  const TeamPitchView({super.key, required this.jugadores, this.onTapPlayer});
+
+  List<TeamPlayer> _porPosicion(String posicion) =>
+      jugadores.where((j) => j.posicion == posicion).toList();
+
+  @override
+  Widget build(BuildContext context) {
+    final filas = [
+      _porPosicion('DEL'),
+      _porPosicion('MED'),
+      _porPosicion('DEF'),
+      _porPosicion('POR'),
+    ].where((fila) => fila.isNotEmpty).toList();
+
+    return AspectRatio(
+      aspectRatio: 0.68,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: DecoratedBox(
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Color(0xFF1E7D3C), Color(0xFF2A9950)],
+                  ),
+                ),
+                child: CustomPaint(painter: _PitchPainter(), size: Size.infinite),
+              ),
+            ),
+            if (filas.isEmpty)
+              const Positioned.fill(
+                child: Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Text(
+                      'Tu campo está vacío.\nAñade jugadores para verlos aquí.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ),
+              )
+            else
+              Positioned.fill(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 4),
+                  child: Column(
+                    children: [
+                      for (final fila in filas)
+                        Expanded(
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [for (final jugador in fila) _TeamPlayerChip(jugador: jugador, onTap: onTapPlayer)],
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TeamPlayerChip extends StatelessWidget {
+  final TeamPlayer jugador;
+  final void Function(TeamPlayer)? onTap;
+
+  const _TeamPlayerChip({required this.jugador, this.onTap});
+
+  String _apellido(String nombre) {
+    final partes = nombre.split(' ');
+    return partes.length > 1 ? partes.last : nombre;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap == null ? null : () => onTap!(jugador),
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 2),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: colorForPosicion(jugador.posicion),
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 1.5),
+                boxShadow: const [BoxShadow(color: Colors.black38, blurRadius: 4, offset: Offset(0, 2))],
+              ),
+              child: Text(
+                jugador.posicion,
+                style: const TextStyle(color: Colors.black, fontSize: 9, fontWeight: FontWeight.w800),
+              ),
+            ),
+            const SizedBox(height: 2),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 68),
+              child: Text(
+                _apellido(jugador.nombre),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  shadows: [Shadow(color: Colors.black54, blurRadius: 3)],
+                ),
+              ),
+            ),
+            Text(
+              '${(jugador.precio / 1000000).toStringAsFixed(1)}M€',
+              style: const TextStyle(
+                color: Colors.white70,
+                fontSize: 9,
+                shadows: [Shadow(color: Colors.black54, blurRadius: 3)],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _PlayerChip extends StatelessWidget {
   final LineupPlayer jugador;
   final void Function(LineupPlayer)? onTap;

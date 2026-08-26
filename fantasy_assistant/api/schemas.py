@@ -61,6 +61,11 @@ class PlayerHistorialOut(BaseModel):
     puntos: list[PointsEntryOut]
 
 
+class TeamMemberIn(BaseModel):
+    device_id: str
+    player_id: str
+
+
 class TeamPlayerOut(BaseModel):
     id: str
     source: str

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import 'api_client.dart';
+import 'device_id.dart';
 import 'history_charts.dart';
 import 'pitch_view.dart';
 import 'theme.dart';
@@ -124,19 +125,37 @@ class _PlayerSearchScreenState extends State<PlayerSearchScreen> {
       appBar: AppBar(
         title: const Text('Fantasy Assistant'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.shield_rounded),
-            tooltip: 'Mi plantilla',
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => TeamScreen(api: _api)),
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.auto_awesome_rounded),
-            tooltip: 'Optimizador de alineación',
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => LineupScreen(api: _api, source: _source)),
-            ),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.menu_rounded),
+            tooltip: 'Menú',
+            onSelected: (opcion) {
+              switch (opcion) {
+                case 'plantilla':
+                  Navigator.of(context).push(MaterialPageRoute(builder: (_) => TeamScreen(api: _api)));
+                case 'optimizador':
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => LineupScreen(api: _api, source: _source)),
+                  );
+              }
+            },
+            itemBuilder: (context) => const [
+              PopupMenuItem(
+                value: 'plantilla',
+                child: ListTile(
+                  leading: Icon(Icons.shield_rounded),
+                  title: Text('Mi plantilla'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+              PopupMenuItem(
+                value: 'optimizador',
+                child: ListTile(
+                  leading: Icon(Icons.auto_awesome_rounded),
+                  title: Text('Optimizador de alineación'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+            ],
           ),
           const SizedBox(width: 4),
         ],
@@ -237,24 +256,30 @@ class TeamScreen extends StatefulWidget {
 }
 
 class _TeamScreenState extends State<TeamScreen> {
+  String? _deviceId;
+  String _source = 'biwenger';
   List<TeamPlayer>? _jugadores;
   String? _error;
 
   @override
   void initState() {
     super.initState();
-    _cargar();
+    _init();
+  }
+
+  Future<void> _init() async {
+    final id = await getDeviceId();
+    if (!mounted) return;
+    setState(() => _deviceId = id);
+    await _cargar();
   }
 
   Future<void> _cargar() async {
+    final deviceId = _deviceId;
+    if (deviceId == null) return;
     setState(() => _error = null);
-    final token = currentFcmToken;
-    if (token == null) {
-      setState(() => _error = 'Notificaciones no disponibles todavía en este dispositivo.');
-      return;
-    }
     try {
-      final jugadores = await widget.api.getTeam(token);
+      final jugadores = await widget.api.getTeam(deviceId, source: _source);
       if (!mounted) return;
       setState(() => _jugadores = jugadores);
     } catch (e) {
@@ -263,10 +288,56 @@ class _TeamScreenState extends State<TeamScreen> {
     }
   }
 
+  void _onSourceChanged(String source) {
+    setState(() {
+      _source = source;
+      _jugadores = null;
+    });
+    _cargar();
+  }
+
+  Future<void> _quitar(TeamPlayer jugador) async {
+    final deviceId = _deviceId;
+    if (deviceId == null) return;
+    setState(() => _jugadores = _jugadores!.where((j) => j.id != jugador.id).toList());
+    try {
+      await widget.api.removeFromTeam(deviceId: deviceId, playerId: jugador.id);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('No se pudo quitar: $e')));
+      _cargar();
+    }
+  }
+
+  Future<void> _anadirJugador() async {
+    final deviceId = _deviceId;
+    if (deviceId == null) return;
+    final elegido = await showModalBottomSheet<Player>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: kSurfaceColor,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (_) => _AddPlayerSheet(api: widget.api, source: _source, yaEnPlantilla: _jugadores ?? []),
+    );
+    if (elegido == null) return;
+    try {
+      await widget.api.addToTeam(deviceId: deviceId, playerId: elegido.id);
+      _cargar();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('No se pudo añadir: $e')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Mi plantilla')),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _deviceId == null ? null : _anadirJugador,
+        icon: const Icon(Icons.add_rounded),
+        label: const Text('Añadir jugador'),
+      ),
       body: RefreshIndicator(
         onRefresh: _cargar,
         child: _buildBody(context),
@@ -275,67 +346,68 @@ class _TeamScreenState extends State<TeamScreen> {
   }
 
   Widget _buildBody(BuildContext context) {
-    if (_error != null) {
-      return ListView(
-        children: [
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
+      children: [
+        _SourceToggle(source: _source, onChanged: _onSourceChanged),
+        const SizedBox(height: 16),
+        if (_error != null)
           Padding(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.only(bottom: 16),
             child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
           ),
-        ],
-      );
-    }
-    if (_jugadores == null) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    if (_jugadores!.isEmpty) {
-      return ListView(
-        children: const [
-          Padding(
-            padding: EdgeInsets.all(32),
-            child: Center(
-              child: Text(
-                'Todavía no has añadido jugadores a tu plantilla.\n'
-                'Búscalos y pulsa el botón de alertas en su ficha para empezar a seguirlos.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: kTextSecondary),
+        if (_jugadores == null)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 60),
+            child: Center(child: CircularProgressIndicator()),
+          )
+        else ...[
+          TeamPitchView(
+            jugadores: _jugadores!,
+            onTapPlayer: (j) => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => PrediccionScreen(
+                  player: Player(
+                    id: j.id,
+                    source: j.source,
+                    nombre: j.nombre,
+                    equipo: j.equipo,
+                    posicion: j.posicion,
+                    precio: j.precio,
+                  ),
+                  api: widget.api,
+                ),
               ),
             ),
           ),
-        ],
-      );
-    }
-    return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-      itemCount: _jugadores!.length,
-      separatorBuilder: (_, _) => const SizedBox(height: 10),
-      itemBuilder: (context, index) => _TeamPlayerCard(
-        jugador: _jugadores![index],
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => PrediccionScreen(
-              player: Player(
-                id: _jugadores![index].id,
-                source: _jugadores![index].source,
-                nombre: _jugadores![index].nombre,
-                equipo: _jugadores![index].equipo,
-                posicion: _jugadores![index].posicion,
-                precio: _jugadores![index].precio,
+          const SizedBox(height: 20),
+          if (_jugadores!.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 20),
+              child: Center(
+                child: Text(
+                  'Todavía no has colocado jugadores en tu plantilla.\nUsa "Añadir jugador" para empezar.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: kTextSecondary),
+                ),
               ),
-              api: widget.api,
-            ),
-          ),
-        ),
-      ),
+            )
+          else
+            for (final jugador in _jugadores!) ...[
+              _TeamPlayerCard(jugador: jugador, onQuitar: () => _quitar(jugador)),
+              const SizedBox(height: 10),
+            ],
+        ],
+      ],
     );
   }
 }
 
 class _TeamPlayerCard extends StatelessWidget {
   final TeamPlayer jugador;
-  final VoidCallback onTap;
+  final VoidCallback onQuitar;
 
-  const _TeamPlayerCard({required this.jugador, required this.onTap});
+  const _TeamPlayerCard({required this.jugador, required this.onQuitar});
 
   @override
   Widget build(BuildContext context) {
@@ -347,64 +419,156 @@ class _TeamPlayerCard extends StatelessWidget {
         ? Icons.arrow_upward_rounded
         : (bajando ? Icons.arrow_downward_rounded : Icons.remove_rounded);
 
-    return Material(
-      color: kSurfaceColor,
-      borderRadius: BorderRadius.circular(18),
-      child: InkWell(
-        onTap: onTap,
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: kSurfaceColor,
         borderRadius: BorderRadius.circular(18),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: kBorderColor),
+        border: Border.all(color: kBorderColor),
+      ),
+      child: Row(
+        children: [
+          PositionBadge(posicion: jugador.posicion),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(jugador.nombre, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 2),
+                Text(jugador.equipo, style: const TextStyle(fontSize: 13, color: kTextSecondary)),
+              ],
+            ),
           ),
-          child: Row(
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              PositionBadge(posicion: jugador.posicion),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(jugador.nombre, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
-                    const SizedBox(height: 2),
-                    Text(jugador.equipo, style: const TextStyle(fontSize: 13, color: kTextSecondary)),
-                  ],
-                ),
+              Text(
+                '${(jugador.precio / 1000000).toStringAsFixed(2)} M€',
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
               ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
+              const SizedBox(height: 3),
+              Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
+                  Icon(iconoVariacion, size: 13, color: colorVariacion),
+                  if (variacion != null)
+                    Text(
+                      '${(variacion.abs() / 1000).toStringAsFixed(0)} k€',
+                      style: TextStyle(fontSize: 11, color: colorVariacion, fontWeight: FontWeight.w600),
+                    ),
+                  const SizedBox(width: 8),
+                  Icon(Icons.sports_soccer_rounded, size: 12, color: kTextTertiary),
+                  const SizedBox(width: 2),
                   Text(
-                    '${(jugador.precio / 1000000).toStringAsFixed(2)} M€',
-                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
-                  ),
-                  const SizedBox(height: 3),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(iconoVariacion, size: 13, color: colorVariacion),
-                      if (variacion != null)
-                        Text(
-                          '${(variacion.abs() / 1000).toStringAsFixed(0)} k€',
-                          style: TextStyle(fontSize: 11, color: colorVariacion, fontWeight: FontWeight.w600),
-                        ),
-                      const SizedBox(width: 8),
-                      Icon(Icons.sports_soccer_rounded, size: 12, color: kTextTertiary),
-                      const SizedBox(width: 2),
-                      Text(
-                        jugador.puntosUltimaJornada != null
-                            ? '${jugador.puntosUltimaJornada} · ${jugador.puntosTemporada} pts'
-                            : '${jugador.puntosTemporada} pts',
-                        style: const TextStyle(fontSize: 11, color: kTextTertiary, fontWeight: FontWeight.w600),
-                      ),
-                    ],
+                    jugador.puntosUltimaJornada != null
+                        ? '${jugador.puntosUltimaJornada} · ${jugador.puntosTemporada} pts'
+                        : '${jugador.puntosTemporada} pts',
+                    style: const TextStyle(fontSize: 11, color: kTextTertiary, fontWeight: FontWeight.w600),
                   ),
                 ],
               ),
             ],
           ),
+          IconButton(
+            icon: const Icon(Icons.close_rounded, size: 18, color: kTextTertiary),
+            tooltip: 'Quitar de la plantilla',
+            onPressed: onQuitar,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Buscador de jugadores en un bottom sheet, para añadir a la plantilla.
+class _AddPlayerSheet extends StatefulWidget {
+  final FantasyApiClient api;
+  final String source;
+  final List<TeamPlayer> yaEnPlantilla;
+
+  const _AddPlayerSheet({required this.api, required this.source, required this.yaEnPlantilla});
+
+  @override
+  State<_AddPlayerSheet> createState() => _AddPlayerSheetState();
+}
+
+class _AddPlayerSheetState extends State<_AddPlayerSheet> {
+  final _controller = TextEditingController();
+  Timer? _debounce;
+  List<Player> _resultados = [];
+  bool _loading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _buscar('');
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _buscar(String query) async {
+    setState(() => _loading = true);
+    try {
+      final resultados = await widget.api.searchPlayers(query, source: widget.source);
+      if (!mounted) return;
+      final idsEnPlantilla = widget.yaEnPlantilla.map((j) => j.id).toSet();
+      setState(() => _resultados = resultados.where((p) => !idsEnPlantilla.contains(p.id)).toList());
+    } catch (_) {
+      // silencioso: el buscador simplemente no muestra resultados
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  void _onChanged(String query) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 350), () => _buscar(query));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: SizedBox(
+        height: MediaQuery.of(context).size.height * 0.75,
+        child: Column(
+          children: [
+            const SizedBox(height: 12),
+            Container(width: 36, height: 4, decoration: BoxDecoration(color: kBorderColor, borderRadius: BorderRadius.circular(2))),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+              child: TextField(
+                controller: _controller,
+                autofocus: true,
+                onChanged: _onChanged,
+                decoration: const InputDecoration(
+                  hintText: 'Buscar jugador para añadir',
+                  prefixIcon: Icon(Icons.search_rounded, color: kTextSecondary),
+                ),
+              ),
+            ),
+            SizedBox(
+              height: 3,
+              child: _loading ? const LinearProgressIndicator(minHeight: 3, backgroundColor: Colors.transparent) : null,
+            ),
+            Expanded(
+              child: ListView.separated(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+                itemCount: _resultados.length,
+                separatorBuilder: (_, _) => const SizedBox(height: 10),
+                itemBuilder: (context, index) {
+                  final player = _resultados[index];
+                  return _PlayerCard(player: player, onTap: () => Navigator.of(context).pop(player));
+                },
+              ),
+            ),
+          ],
         ),
       ),
     );
