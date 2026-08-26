@@ -37,52 +37,69 @@ def sync_once(source: FantasyDataSource | None = None) -> int:
     today = dt.date.today()
     disparadas: list[alerts.Alert] = []
 
+    fallidos = 0
     with get_session() as session:
         for p in players:
             record_id = _composite_id(p.source, p.id)
 
-            existing = session.get(PlayerRecord, record_id)
-            if existing:
-                alert = alerts.check_price_change(record_id, p.nombre, existing.precio, p.precio)
-                if alert:
-                    disparadas.append(alert)
-                existing.nombre = p.nombre
-                existing.equipo = p.equipo
-                existing.posicion = p.posicion
-                existing.precio = p.precio
-            else:
-                session.add(
-                    PlayerRecord(
-                        id=record_id,
-                        source=p.source,
-                        external_id=p.id,
-                        nombre=p.nombre,
-                        equipo=p.equipo,
-                        posicion=p.posicion,
-                        precio=p.precio,
+            try:
+                existing = session.get(PlayerRecord, record_id)
+                if existing:
+                    alert = alerts.check_price_change(record_id, p.nombre, existing.precio, p.precio)
+                    if alert:
+                        disparadas.append(alert)
+                    existing.nombre = p.nombre
+                    existing.equipo = p.equipo
+                    existing.posicion = p.posicion
+                    existing.precio = p.precio
+                else:
+                    session.add(
+                        PlayerRecord(
+                            id=record_id,
+                            source=p.source,
+                            external_id=p.id,
+                            nombre=p.nombre,
+                            equipo=p.equipo,
+                            posicion=p.posicion,
+                            precio=p.precio,
+                        )
                     )
-                )
 
-            _upsert_price_snapshot(session, record_id, p.source, today, p.precio)
+                _upsert_price_snapshot(session, record_id, p.source, today, p.precio)
 
-            # Histórico extra que algunas fuentes puedan ofrecer (ej. LaLiga
-            # Fantasy da hasta 30 días de precios en la misma petición que
-            # el listado de jugadores). Biwenger devuelve lista vacía aquí.
-            for punto in source.get_player_price_history(p.id):
-                _upsert_price_snapshot(session, record_id, p.source, dt.date.fromisoformat(punto.fecha), punto.precio)
+                # Histórico extra que algunas fuentes puedan ofrecer (ej.
+                # LaLiga Fantasy da hasta 30 días de precios en la misma
+                # petición que el listado de jugadores). Biwenger devuelve
+                # lista vacía aquí.
+                for punto in source.get_player_price_history(p.id):
+                    _upsert_price_snapshot(session, record_id, p.source, dt.date.fromisoformat(punto.fecha), punto.precio)
 
-            for entry in source.get_player_points_history(p.id):
-                _upsert_points(session, record_id, p.source, entry.jornada, entry.puntos)
+                for entry in source.get_player_points_history(p.id):
+                    _upsert_points(session, record_id, p.source, entry.jornada, entry.puntos)
 
-            # Commit por jugador en vez de uno solo al final: con fuentes
-            # lentas (ej. LaLiga Fantasy, ~6 min por el scraping jornada a
-            # jornada) una única transacción larga bloquearía cualquier otra
-            # escritura (registro de dispositivo, suscripción...) durante
-            # todo ese tiempo — visto en producción como "database is
-            # locked". Aquí el lock dura lo que tarda un solo jugador.
-            session.commit()
+                # Commit por jugador en vez de uno solo al final: con fuentes
+                # lentas (ej. LaLiga Fantasy, ~6 min por el scraping jornada a
+                # jornada) una única transacción larga bloquearía cualquier
+                # otra escritura (registro de dispositivo, suscripción...)
+                # durante todo ese tiempo — visto en producción como
+                # "database is locked".
+                session.commit()
+            except Exception:
+                # Un jugador con datos raros o un fallo de red puntual (ej.
+                # get_player_points_history de LaLiga Fantasy, que hace una
+                # petición HTTP por jugador) no debe tirar la sincronización
+                # entera — visto en producción: Biwenger se quedó atascado a
+                # mitad de sync sin seguir con el resto. Se salta ese
+                # jugador y sigue con los demás.
+                session.rollback()
+                fallidos += 1
+                logger.exception("Fallo sincronizando %s — se salta y se sigue", record_id)
 
-        if disparadas:
+        if fallidos:
+            logger.warning("%d/%d jugadores fallaron al sincronizar (fuente=%s)", fallidos, len(players), config.fantasy_source)
+
+    if disparadas:
+        with get_session() as session:
             _send_alerts(session, disparadas)
 
     fuente = players[0].source if players else config.fantasy_source
