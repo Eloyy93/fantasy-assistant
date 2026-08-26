@@ -140,13 +140,16 @@ fuentes consultadas para documentar esto había bloqueado explícitamente esa
 parte de su propio proyecto "hasta autorización escrita de LALIGA". Antes
 de implementarlo, vale la pena decidir conscientemente si seguir adelante.
 
-No hay desglose público jornada a jornada de LaLiga Fantasy, pero
-`/analytics/laliga-fantasy/puntos` sí trae la media de puntos de los
-últimos 3 partidos por jugador (`data-media3`) en el mismo HTML servido por
-el servidor. `get_player_points_history()` sintetiza 3 entradas con esa
-media, para que el optimizador (módulo 2) reciba la misma señal de "puntos
-esperados" que con Biwenger y las alineaciones para ambas fuentes maximicen
-puntos reales, no un valor fijo a 0.
+`get_player_points_history()` trae el desglose **real** jornada a jornada:
+`/analytics/laliga-fantasy/puntos` abre, por jugador, un modal
+(`/analytics/stats/detalle/{id}/{temporada}`) con una fila por partido
+jugado y su puntuación exacta en modo "laliga-fantasy". Es una petición
+extra por jugador (no viene en el listado general), así que la
+sincronización tarda unos 5-6 minutos más por esto — con un margen de 0.4s
+entre peticiones para no saltar el rate-limiting del sitio (confirmado:
+sin margen, corta la conexión a partir de la petición ~40). Con eso el
+optimizador (módulo 2) recibe puntos reales de LaLiga Fantasy, no
+sintéticos, igual que ya tenía con Biwenger.
 
 ## Arquitectura
 
