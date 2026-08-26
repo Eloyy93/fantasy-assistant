@@ -435,9 +435,18 @@ class _TeamScreenState extends State<TeamScreen> {
             ListTile(
               leading: const Icon(Icons.remove_circle_outline_rounded),
               title: const Text('Quitar del campo'),
+              subtitle: const Text('Pasa al banquillo, sigue en tu plantilla'),
               onTap: () {
                 Navigator.pop(sheetContext);
                 _quitarDelCampo(ocupante);
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.delete_outline_rounded, color: Theme.of(sheetContext).colorScheme.error),
+              title: Text('Eliminar de la plantilla', style: TextStyle(color: Theme.of(sheetContext).colorScheme.error)),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _quitarDelEquipo(ocupante);
               },
             ),
             const SizedBox(height: 8),
@@ -447,10 +456,52 @@ class _TeamScreenState extends State<TeamScreen> {
     );
   }
 
+  Future<void> _vaciarPlantilla() async {
+    final deviceId = _deviceId;
+    if (deviceId == null || (_jugadores ?? []).isEmpty) return;
+
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('¿Vaciar la plantilla?'),
+        content: Text(
+          'Se quitarán los ${_jugadores!.length} jugadores de tu plantilla de '
+          '${_source == 'biwenger' ? 'Biwenger' : 'LaLiga Fantasy'}. Esto no se puede deshacer.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancelar')),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text('Vaciar', style: TextStyle(color: Theme.of(dialogContext).colorScheme.error)),
+          ),
+        ],
+      ),
+    );
+    if (confirmar != true) return;
+
+    try {
+      await widget.api.clearTeam(deviceId: deviceId, source: _source);
+      _cargar();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('No se pudo vaciar la plantilla: $e')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final hayJugadores = (_jugadores ?? []).isNotEmpty;
     return Scaffold(
-      appBar: AppBar(title: const Text('Mi plantilla')),
+      appBar: AppBar(
+        title: const Text('Mi plantilla'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.delete_sweep_rounded),
+            tooltip: 'Vaciar plantilla',
+            onPressed: hayJugadores ? _vaciarPlantilla : null,
+          ),
+        ],
+      ),
       body: RefreshIndicator(
         onRefresh: _cargar,
         child: _buildBody(context),

@@ -247,6 +247,21 @@ def remove_from_team(payload: TeamMemberIn, db: Session = Depends(get_db)) -> No
     db.commit()
 
 
+@app.delete("/team/clear", status_code=204)
+def clear_team(device_id: str = Query(...), source: str = Query(...), db: Session = Depends(get_db)) -> None:
+    """Vacía toda la plantilla de una fuente (banquillo + huecos). No toca
+    la formación elegida ni la plantilla de la otra fuente."""
+    player_ids_de_la_fuente = db.execute(
+        select(PlayerRecord.id).where(PlayerRecord.source == source)
+    ).scalars().all()
+    db.execute(
+        TeamPlayer.__table__.delete().where(
+            TeamPlayer.device_id == device_id, TeamPlayer.player_id.in_(player_ids_de_la_fuente)
+        )
+    )
+    db.commit()
+
+
 @app.get("/team/contains")
 def team_contains(device_id: str = Query(...), player_id: str = Query(...), db: Session = Depends(get_db)) -> dict:
     """Consulta ligera para el botón "añadir a mi plantilla" de la ficha de

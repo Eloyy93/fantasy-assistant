@@ -365,6 +365,16 @@ class FantasyApiClient {
     }
   }
 
+  Future<void> clearTeam({required String deviceId, required String source}) async {
+    final uri = Uri.parse('$baseUrl/team/clear').replace(
+      queryParameters: {'device_id': deviceId, 'source': source},
+    );
+    final response = await http.delete(uri).timeout(const Duration(seconds: 20));
+    if (response.statusCode >= 300) {
+      throw ApiException('Error ${response.statusCode} al vaciar la plantilla');
+    }
+  }
+
   Future<String> getFormacion({required String deviceId, required String source}) async {
     final uri = Uri.parse('$baseUrl/team/formacion').replace(
       queryParameters: {'device_id': deviceId, 'source': source},
