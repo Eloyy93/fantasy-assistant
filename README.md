@@ -54,13 +54,13 @@ uvicorn fantasy_assistant.api.main:app --reload
 | `BiwengerAdapter` | Funcionando (datos públicos de jugadores, sin auth) |
 | `LaLigaFantasyAdapter` | Stub, fase 2 (OAuth2 B2C) |
 | Módulo 1 — Predictor de precio | Funcionando (reglas simples) |
-| Módulo 2 — Optimizador de alineación | Stub, fase 2 |
-| Módulo 3 — Alertas | Stub, fase 3 (push vía Firebase Cloud Messaging) |
-| API REST (`fantasy_assistant/api`) | Funcionando: `/players`, `/players/{id}/prediccion`, `/devices` |
-| Bot de Telegram | `/prediccion` funcionando end-to-end; `/alineacion` y `/alertas` responden "pendiente" |
+| Módulo 2 — Optimizador de alineación | Funcionando (mochila por posición sobre todo el mercado) |
+| Módulo 3 — Alertas | Funcionando (push vía FCM, cambio de precio >3% entre syncs) |
+| API REST (`fantasy_assistant/api`) | Funcionando: `/players`, `/players/{id}/prediccion`, `/lineup`, `/devices` |
+| Bot de Telegram | `/prediccion` y `/alineacion` funcionando end-to-end; `/alertas` responde "pendiente" (fase 3b: suscripción por jugador) |
 | App Android (Flutter, `app/`) | Funcionando, apuntando al backend en producción |
 | Despliegue backend | **En producción en Railway**, sincronizando datos reales cada 3h |
-| Notificaciones push (FCM) | Pendiente fase 3, junto con `modules/alerts.py` |
+| Notificaciones push (FCM) | Funcionando, verificado extremo a extremo |
 
 ## App Android (Flutter)
 
@@ -99,6 +99,19 @@ Para probar la imagen en local antes de desplegar (necesita Docker Desktop arran
 docker build -t fantasy-assistant-api .
 docker run -p 8000:8000 -e FANTASY_SOURCE=biwenger fantasy-assistant-api
 ```
+
+## Módulo 2 — Optimizador de alineación
+
+Dado un presupuesto y una formación (`4-3-3`, `4-4-2`, `3-4-3`, `3-5-2`,
+`5-3-2` o `5-4-1`), elige entre TODOS los jugadores del mercado la
+combinación que maximiza la suma de puntos esperados (media de las últimas
+3 jornadas de cada jugador) sin superar el presupuesto — un problema de
+mochila por grupos (posición = grupo, hay que elegir exactamente N de cada
+una), resuelto con programación dinámica en `modules/lineup_optimizer.py`.
+
+# TODO fase 2b: usar la plantilla real del usuario (login + `get_user_team()`,
+ya implementado en `BiwengerAdapter`) en vez de un presupuesto manual, para
+no sugerir comprar jugadores que ya tiene.
 
 ## Arquitectura
 
