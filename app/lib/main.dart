@@ -163,6 +163,15 @@ class _PlayerSearchScreenState extends State<PlayerSearchScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
             ),
+          if (!_loading && _error == null && _players.isEmpty)
+            Padding(
+              padding: const EdgeInsets.all(32),
+              child: Text(
+                'Sin jugadores disponibles en esta fuente ahora mismo.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+              ),
+            ),
           Expanded(
             child: ListView.builder(
               itemCount: _players.length,
