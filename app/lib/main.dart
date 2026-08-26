@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import 'api_client.dart';
 import 'history_charts.dart';
@@ -222,34 +223,33 @@ class _SourceToggle extends StatelessWidget {
       ),
       child: Row(
         children: [
-          _segment(context, 'biwenger', 'Biwenger'),
-          _segment(context, 'laligafantasy', 'LaLiga Fantasy'),
+          _segment(context, 'biwenger', 'Biwenger', 'assets/logos/biwenger.svg'),
+          _segment(context, 'laligafantasy', 'LaLiga Fantasy', 'assets/logos/laligafantasy.png'),
         ],
       ),
     );
   }
 
-  Widget _segment(BuildContext context, String value, String label) {
+  Widget _segment(BuildContext context, String value, String label, String logoAsset) {
     final selected = source == value;
+    final logo = logoAsset.endsWith('.svg')
+        ? SvgPicture.asset(logoAsset, height: 26)
+        : Image.asset(logoAsset, height: 26);
+
     return Expanded(
-      child: GestureDetector(
-        onTap: () => onChanged(value),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          decoration: BoxDecoration(
-            color: selected ? kMintAccent : Colors.transparent,
-            borderRadius: BorderRadius.circular(11),
-          ),
-          child: Text(
-            label,
-            textAlign: TextAlign.center,
-            maxLines: 1,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: selected ? Colors.black : kTextSecondary,
+      child: Tooltip(
+        message: label,
+        child: GestureDetector(
+          onTap: () => onChanged(value),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            decoration: BoxDecoration(
+              color: selected ? kMintAccent.withValues(alpha: 0.16) : Colors.transparent,
+              borderRadius: BorderRadius.circular(11),
+              border: selected ? Border.all(color: kMintAccent.withValues(alpha: 0.6)) : null,
             ),
+            child: Center(child: logo),
           ),
         ),
       ),
