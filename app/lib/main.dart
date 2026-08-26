@@ -4,6 +4,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 
 import 'api_client.dart';
+import 'history_charts.dart';
 import 'pitch_view.dart';
 import 'theme.dart';
 
@@ -215,12 +216,15 @@ class _PrediccionScreenState extends State<PrediccionScreen> {
   String? _error;
   bool? _suscrito; // null mientras se comprueba el estado inicial
   bool _cambiandoSuscripcion = false;
+  PlayerHistorial? _historial;
+  String? _errorHistorial;
 
   @override
   void initState() {
     super.initState();
     _load();
     _cargarEstadoSuscripcion();
+    _cargarHistorial();
   }
 
   Future<void> _load() async {
@@ -231,6 +235,17 @@ class _PrediccionScreenState extends State<PrediccionScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _error = 'No se pudo obtener la predicción: $e');
+    }
+  }
+
+  Future<void> _cargarHistorial() async {
+    try {
+      final historial = await widget.api.getHistorial(widget.player.id);
+      if (!mounted) return;
+      setState(() => _historial = historial);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _errorHistorial = 'No se pudo cargar el historial: $e');
     }
   }
 
@@ -321,7 +336,7 @@ class _PrediccionScreenState extends State<PrediccionScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: Text(widget.player.nombre)),
-      body: Padding(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -367,6 +382,19 @@ class _PrediccionScreenState extends State<PrediccionScreen> {
                   ),
                 ),
               ),
+            const SizedBox(height: 32),
+            Text('Evolución de precio', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            if (_errorHistorial != null)
+              Text(_errorHistorial!, style: TextStyle(color: Theme.of(context).colorScheme.error))
+            else if (_historial == null)
+              const Center(child: CircularProgressIndicator())
+            else
+              PriceHistoryChart(precios: _historial!.precios),
+            const SizedBox(height: 32),
+            Text('Puntos por jornada', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            if (_errorHistorial == null && _historial != null) PointsHistoryChart(puntos: _historial!.puntos),
           ],
         ),
       ),

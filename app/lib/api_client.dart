@@ -107,6 +107,49 @@ class OptimizedLineup {
   }
 }
 
+class PricePoint {
+  final DateTime fecha;
+  final int precio;
+
+  PricePoint({required this.fecha, required this.precio});
+
+  factory PricePoint.fromJson(Map<String, dynamic> json) {
+    return PricePoint(
+      fecha: DateTime.parse(json['fecha'] as String),
+      precio: json['precio'] as int,
+    );
+  }
+}
+
+class PointsEntry {
+  final int jornada;
+  final int puntos;
+
+  PointsEntry({required this.jornada, required this.puntos});
+
+  factory PointsEntry.fromJson(Map<String, dynamic> json) {
+    return PointsEntry(jornada: json['jornada'] as int, puntos: json['puntos'] as int);
+  }
+}
+
+class PlayerHistorial {
+  final List<PricePoint> precios;
+  final List<PointsEntry> puntos;
+
+  PlayerHistorial({required this.precios, required this.puntos});
+
+  factory PlayerHistorial.fromJson(Map<String, dynamic> json) {
+    return PlayerHistorial(
+      precios: (json['precios'] as List<dynamic>)
+          .map((e) => PricePoint.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      puntos: (json['puntos'] as List<dynamic>)
+          .map((e) => PointsEntry.fromJson(e as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+}
+
 class ApiException implements Exception {
   final String message;
   ApiException(this.message);
@@ -155,6 +198,15 @@ class FantasyApiClient {
       throw ApiException(body['detail']?.toString() ?? 'Error ${response.statusCode} al calcular la alineación');
     }
     return OptimizedLineup.fromJson(jsonDecode(utf8.decode(response.bodyBytes)));
+  }
+
+  Future<PlayerHistorial> getHistorial(String playerId) async {
+    final uri = Uri.parse('$baseUrl/players/$playerId/historial');
+    final response = await http.get(uri).timeout(const Duration(seconds: 10));
+    if (response.statusCode != 200) {
+      throw ApiException('Error ${response.statusCode} al obtener el historial');
+    }
+    return PlayerHistorial.fromJson(jsonDecode(utf8.decode(response.bodyBytes)));
   }
 
   Future<void> registerDevice(String fcmToken) async {
