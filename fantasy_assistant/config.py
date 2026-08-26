@@ -6,7 +6,10 @@ from dataclasses import dataclass, field
 
 from dotenv import load_dotenv
 
-load_dotenv()
+# override=True: el .env de este proyecto manda incluso si ya existe una
+# variable de entorno del mismo nombre en el sistema (ej. TELEGRAM_BOT_TOKEN
+# de otro proyecto en la misma máquina) — si no, se cuela silenciosamente.
+load_dotenv(override=True)
 
 
 def _float_env(name: str, default: float) -> float:

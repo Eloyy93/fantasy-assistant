@@ -59,15 +59,23 @@ class PointsHistory(Base):
 
 class DeviceRegistration(Base):
     """Token FCM de un dispositivo Android para poder enviarle notificaciones
-    push. Registrado por la app desde POST /devices.
-
-    # TODO fase 3: tabla de suscripciones (device_id, player_id) para saber
-    # a qué jugadores está suscrito cada dispositivo, y usarla desde
-    # modules/alerts.py al disparar una alerta.
-    """
+    push. Registrado por la app desde POST /devices."""
 
     __tablename__ = "devices"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     fcm_token: Mapped[str] = mapped_column(String, unique=True, index=True)
     user_id: Mapped[str] = mapped_column(String, index=True, nullable=True)
+
+
+class TelegramSubscription(Base):
+    """Suscripción de un chat de Telegram a las alertas de un jugador
+    concreto (`/alertas on|off <jugador>`)."""
+
+    __tablename__ = "telegram_subscriptions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    chat_id: Mapped[str] = mapped_column(String, index=True)
+    player_id: Mapped[str] = mapped_column(ForeignKey("players.id"), index=True)
+
+    __table_args__ = (UniqueConstraint("chat_id", "player_id", name="uq_subscription_chat_player"),)

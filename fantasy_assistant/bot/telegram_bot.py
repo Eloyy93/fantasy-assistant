@@ -4,7 +4,8 @@ Comandos v1:
     /fuente biwenger | laligafantasy   - elige la fuente de datos (por usuario)
     /prediccion <jugador>              - módulo 1 (predictor de precio)
     /alineacion <presupuesto> [formación] - módulo 2 (optimizador de alineación)
-    /alertas on|off <jugador>          - módulo 3 (TODO fase 3b: suscripción por jugador)
+    /alertas on|off <jugador>          - módulo 3: suscripción a alertas de un jugador
+    /alertas                           - lista tus suscripciones activas
     /ayuda
 """
 from __future__ import annotations
@@ -17,7 +18,7 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 
 from fantasy_assistant.config import config
 from fantasy_assistant.db.database import get_session
-from fantasy_assistant.db.models import PlayerRecord
+from fantasy_assistant.db.models import PlayerRecord, TelegramSubscription
 from fantasy_assistant.modules import lineup_optimizer, price_predictor
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -46,7 +47,8 @@ async def ayuda(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "/fuente biwenger|laligafantasy - elige la fuente de datos\n"
         "/prediccion <jugador> - predicción de precio\n"
         "/alineacion <presupuesto> [formación] - optimizador de alineación (ej. /alineacion 60000000 4-3-3)\n"
-        "/alertas on|off <jugador> - alertas (fase 3)\n"
+        "/alertas on|off <jugador> - suscribirte a las alertas de precio de un jugador\n"
+        "/alertas - lista tus suscripciones activas\n"
         "/ayuda - esta ayuda"
     )
 
@@ -119,7 +121,52 @@ async def alineacion(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
 
 async def alertas(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text("Las alertas llegan en la fase 3. Aún no están disponibles.")
+    chat_id = str(update.effective_chat.id)
+
+    if not context.args:
+        with get_session() as session:
+            rows = session.execute(
+                select(PlayerRecord.nombre)
+                .join(TelegramSubscription, TelegramSubscription.player_id == PlayerRecord.id)
+                .where(TelegramSubscription.chat_id == chat_id)
+            ).scalars().all()
+        if not rows:
+            await update.message.reply_text(
+                "No tienes ninguna alerta activa.\nUso: /alertas on|off <jugador>"
+            )
+        else:
+            await update.message.reply_text("Suscrito a las alertas de:\n" + "\n".join(f"- {n}" for n in rows))
+        return
+
+    accion = context.args[0].lower()
+    if accion not in ("on", "off") or len(context.args) < 2:
+        await update.message.reply_text("Uso: /alertas on|off <jugador>")
+        return
+
+    nombre_query = " ".join(context.args[1:])
+    source = USER_SOURCE.get(update.effective_chat.id, config.fantasy_source)
+    player = _find_player(nombre_query, source)
+    if not player:
+        await update.message.reply_text(f"No encontré ningún jugador que coincida con '{nombre_query}'.")
+        return
+
+    with get_session() as session:
+        existente = session.execute(
+            select(TelegramSubscription).where(
+                TelegramSubscription.chat_id == chat_id, TelegramSubscription.player_id == player.id
+            )
+        ).scalar_one_or_none()
+
+        if accion == "on":
+            if not existente:
+                session.add(TelegramSubscription(chat_id=chat_id, player_id=player.id))
+            mensaje = f"Te avisaré de cambios de precio de {player.nombre}."
+        else:
+            if existente:
+                session.delete(existente)
+            mensaje = f"Ya no recibirás alertas de {player.nombre}."
+
+    await update.message.reply_text(mensaje)
 
 
 def build_app() -> Application:
