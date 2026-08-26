@@ -23,3 +23,19 @@ class PrediccionOut(BaseModel):
 class DeviceRegisterIn(BaseModel):
     fcm_token: str
     user_id: str | None = None
+
+
+class LineupPlayerOut(BaseModel):
+    player_id: str
+    nombre: str
+    equipo: str
+    posicion: str
+    precio: int
+    puntos_esperados: float
+
+
+class OptimizedLineupOut(BaseModel):
+    formacion: str
+    jugadores: list[LineupPlayerOut]
+    puntos_esperados: float
+    presupuesto_usado: int

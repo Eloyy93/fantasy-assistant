@@ -15,12 +15,13 @@ from fastapi import Depends, FastAPI, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from fantasy_assistant.api.schemas import DeviceRegisterIn, PlayerOut, PrediccionOut
+from fantasy_assistant.api.schemas import DeviceRegisterIn, OptimizedLineupOut, PlayerOut, PrediccionOut
 from fantasy_assistant.config import config
 from fantasy_assistant.db.database import SessionLocal, init_db
 from fantasy_assistant.db.models import DeviceRegistration, PlayerRecord
 from fantasy_assistant.jobs.sync_data import sync_once
 from fantasy_assistant.modules import price_predictor
+from fantasy_assistant.modules.lineup_optimizer import FORMACIONES, LineupError, optimize_lineup
 
 app = FastAPI(title="Fantasy Assistant API", version="0.1.0")
 
@@ -92,3 +93,30 @@ def register_device(payload: DeviceRegisterIn, db: Session = Depends(get_db)) ->
     else:
         db.add(DeviceRegistration(fcm_token=payload.fcm_token, user_id=payload.user_id))
     return {"status": "registrado"}
+
+
+@app.get("/lineup", response_model=OptimizedLineupOut)
+def get_lineup(
+    presupuesto: int = Query(..., gt=0, description="Presupuesto disponible en euros"),
+    formacion: str = Query(default="4-3-3", description=f"Una de: {', '.join(FORMACIONES)}"),
+) -> OptimizedLineupOut:
+    try:
+        result = optimize_lineup(presupuesto=presupuesto, formacion=formacion)
+    except LineupError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return OptimizedLineupOut(
+        formacion=result.formacion,
+        jugadores=[
+            {
+                "player_id": j.player_id,
+                "nombre": j.nombre,
+                "equipo": j.equipo,
+                "posicion": j.posicion,
+                "precio": j.precio,
+                "puntos_esperados": j.puntos_esperados,
+            }
+            for j in result.jugadores
+        ],
+        puntos_esperados=result.puntos_esperados,
+        presupuesto_usado=result.presupuesto_usado,
+    )

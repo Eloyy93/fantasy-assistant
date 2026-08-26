@@ -3,8 +3,8 @@
 Comandos v1:
     /fuente biwenger | laligafantasy   - elige la fuente de datos (por usuario)
     /prediccion <jugador>              - módulo 1 (predictor de precio)
-    /alineacion                        - módulo 2 (TODO fase 2)
-    /alertas on|off <jugador>          - módulo 3 (TODO fase 3)
+    /alineacion <presupuesto> [formación] - módulo 2 (optimizador de alineación)
+    /alertas on|off <jugador>          - módulo 3 (TODO fase 3b: suscripción por jugador)
     /ayuda
 """
 from __future__ import annotations
@@ -45,7 +45,7 @@ async def ayuda(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "Comandos disponibles:\n"
         "/fuente biwenger|laligafantasy - elige la fuente de datos\n"
         "/prediccion <jugador> - predicción de precio\n"
-        "/alineacion - optimizador de alineación (fase 2)\n"
+        "/alineacion <presupuesto> [formación] - optimizador de alineación (ej. /alineacion 60000000 4-3-3)\n"
         "/alertas on|off <jugador> - alertas (fase 3)\n"
         "/ayuda - esta ayuda"
     )
@@ -88,10 +88,34 @@ async def prediccion(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
 
 async def alineacion(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not context.args:
+        await update.message.reply_text(
+            "Uso: /alineacion <presupuesto> [formación]\n"
+            f"Formaciones: {', '.join(lineup_optimizer.FORMACIONES)}\n"
+            "Ejemplo: /alineacion 60000000 4-3-3"
+        )
+        return
+
     try:
-        lineup_optimizer.optimize_lineup(user_id=str(update.effective_chat.id), presupuesto=0, formacion="4-3-3")
-    except NotImplementedError:
-        await update.message.reply_text("El optimizador de alineación llega en la fase 2. Aún no está disponible.")
+        presupuesto = int(context.args[0])
+    except ValueError:
+        await update.message.reply_text("El presupuesto debe ser un número entero (en euros).")
+        return
+
+    formacion = context.args[1] if len(context.args) > 1 else "4-3-3"
+    source = USER_SOURCE.get(update.effective_chat.id, config.fantasy_source)
+
+    try:
+        resultado = lineup_optimizer.optimize_lineup(presupuesto=presupuesto, formacion=formacion, source=source)
+    except lineup_optimizer.LineupError as e:
+        await update.message.reply_text(str(e))
+        return
+
+    lineas = [f"Alineación {resultado.formacion} — {resultado.puntos_esperados:.1f} pts esperados"]
+    for jugador in resultado.jugadores:
+        lineas.append(f"{jugador.posicion} {jugador.nombre} ({jugador.equipo}) — {jugador.precio / 1_000_000:.2f} M€")
+    lineas.append(f"\nPresupuesto usado: {resultado.presupuesto_usado / 1_000_000:.2f} M€ de {presupuesto / 1_000_000:.2f} M€")
+    await update.message.reply_text("\n".join(lineas))
 
 
 async def alertas(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
