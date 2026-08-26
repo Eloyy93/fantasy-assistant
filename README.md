@@ -50,9 +50,9 @@ uvicorn fantasy_assistant.api.main:app --reload
 | Componente | Estado |
 |---|---|
 | `BiwengerAdapter` | Funcionando (datos públicos de jugadores, sin auth) |
-| `LaLigaFantasyAdapter` | Jugadores + histórico de precio funcionando de verdad (scraping de futbolfantasy.com, ver abajo); login de usuario pendiente a propósito (fase 2b) |
+| `LaLigaFantasyAdapter` | Jugadores + histórico de precio + puntos esperados funcionando de verdad (scraping de futbolfantasy.com, ver abajo); login de usuario pendiente a propósito (fase 2b) |
 | Módulo 1 — Predictor de precio | Funcionando (reglas simples) |
-| Módulo 2 — Optimizador de alineación | Funcionando (mochila por posición sobre todo el mercado) |
+| Módulo 2 — Optimizador de alineación | Funcionando (mochila por posición sobre todo el mercado), maximiza puntos esperados dentro del presupuesto para **ambas** fuentes (Biwenger y LaLiga Fantasy, selector `source` en `/lineup`) |
 | Módulo 3 — Alertas | Funcionando: push por jugador, solo a los dispositivos suscritos a ese jugador concreto |
 | API REST (`fantasy_assistant/api`) | Funcionando: `/players`, `/players/{id}/prediccion`, `/lineup`, `/devices`, `/subscriptions` |
 | App Android (Flutter, `app/`) | Funcionando, apuntando al backend en producción — única interfaz de usuario, con selector de fuente (Biwenger/LaLiga Fantasy) |
@@ -140,9 +140,13 @@ fuentes consultadas para documentar esto había bloqueado explícitamente esa
 parte de su propio proyecto "hasta autorización escrita de LALIGA". Antes
 de implementarlo, vale la pena decidir conscientemente si seguir adelante.
 
-No se encontró ninguna fuente pública con puntos por jornada de LaLiga
-Fantasy (solo el acumulado de temporada) — queda documentado como TODO en
-el propio adaptador.
+No hay desglose público jornada a jornada de LaLiga Fantasy, pero
+`/analytics/laliga-fantasy/puntos` sí trae la media de puntos de los
+últimos 3 partidos por jugador (`data-media3`) en el mismo HTML servido por
+el servidor. `get_player_points_history()` sintetiza 3 entradas con esa
+media, para que el optimizador (módulo 2) reciba la misma señal de "puntos
+esperados" que con Biwenger y las alineaciones para ambas fuentes maximicen
+puntos reales, no un valor fijo a 0.
 
 ## Arquitectura
 
