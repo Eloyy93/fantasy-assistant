@@ -125,12 +125,19 @@ class _PlayerChip extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            CircleAvatar(
-              radius: 18,
-              backgroundColor: colorForPosicion(jugador.posicion),
+            Container(
+              width: 36,
+              height: 36,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: colorForPosicion(jugador.posicion),
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 1.5),
+                boxShadow: const [BoxShadow(color: Colors.black38, blurRadius: 4, offset: Offset(0, 2))],
+              ),
               child: Text(
                 jugador.posicion,
-                style: const TextStyle(color: Colors.black, fontSize: 9, fontWeight: FontWeight.bold),
+                style: const TextStyle(color: Colors.black, fontSize: 9, fontWeight: FontWeight.w800),
               ),
             ),
             const SizedBox(height: 2),

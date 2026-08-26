@@ -124,78 +124,182 @@ class _PlayerSearchScreenState extends State<PlayerSearchScreen> {
         title: const Text('Fantasy Assistant'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.auto_awesome),
+            icon: const Icon(Icons.auto_awesome_rounded),
             tooltip: 'Optimizador de alineación',
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => LineupScreen(api: _api, source: _source)),
             ),
           ),
+          const SizedBox(width: 4),
         ],
       ),
       body: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-            child: SegmentedButton<String>(
-              segments: const [
-                ButtonSegment(value: 'biwenger', label: Text('Biwenger')),
-                ButtonSegment(value: 'laligafantasy', label: Text('LaLiga Fantasy')),
-              ],
-              selected: {_source},
-              onSelectionChanged: (selection) => _onSourceChanged(selection.first),
-            ),
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+            child: _SourceToggle(source: _source, onChanged: _onSourceChanged),
           ),
           Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
             child: TextField(
               controller: _controller,
               onChanged: _onQueryChanged,
+              style: const TextStyle(fontSize: 15),
               decoration: const InputDecoration(
-                labelText: 'Buscar jugador',
-                prefixIcon: Icon(Icons.search),
-                border: OutlineInputBorder(),
+                hintText: 'Buscar jugador',
+                prefixIcon: Icon(Icons.search_rounded, color: kTextSecondary),
               ),
             ),
           ),
-          if (_loading) const LinearProgressIndicator(),
+          SizedBox(
+            height: 3,
+            child: _loading
+                ? const LinearProgressIndicator(minHeight: 3, backgroundColor: Colors.transparent)
+                : null,
+          ),
           if (_error != null)
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
               child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
             ),
           if (!_loading && _error == null && _players.isEmpty)
-            Padding(
-              padding: const EdgeInsets.all(32),
-              child: Text(
-                'Sin jugadores disponibles en esta fuente ahora mismo.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+            Expanded(
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(32),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.search_off_rounded, size: 40, color: kTextTertiary),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Sin jugadores disponibles en esta fuente ahora mismo.',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: kTextSecondary),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            )
+          else
+            Expanded(
+              child: ListView.separated(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+                itemCount: _players.length,
+                separatorBuilder: (_, _) => const SizedBox(height: 10),
+                itemBuilder: (context, index) {
+                  final player = _players[index];
+                  return _PlayerCard(
+                    player: player,
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => PrediccionScreen(player: player, api: _api)),
+                    ),
+                  );
+                },
               ),
             ),
-          Expanded(
-            child: ListView.builder(
-              itemCount: _players.length,
-              itemBuilder: (context, index) {
-                final player = _players[index];
-                return ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: colorForPosicion(player.posicion),
-                    child: Text(
-                      player.posicion,
-                      style: const TextStyle(color: Colors.black, fontSize: 10, fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                  title: Text(player.nombre),
-                  subtitle: Text(player.equipo),
-                  trailing: Text('${(player.precio / 1000000).toStringAsFixed(2)} M€'),
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => PrediccionScreen(player: player, api: _api)),
-                  ),
-                );
-              },
+        ],
+      ),
+    );
+  }
+}
+
+class _SourceToggle extends StatelessWidget {
+  final String source;
+  final ValueChanged<String> onChanged;
+
+  const _SourceToggle({required this.source, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: kSurfaceColor,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: kBorderColor),
+      ),
+      child: Row(
+        children: [
+          _segment(context, 'biwenger', 'Biwenger'),
+          _segment(context, 'laligafantasy', 'LaLiga Fantasy'),
+        ],
+      ),
+    );
+  }
+
+  Widget _segment(BuildContext context, String value, String label) {
+    final selected = source == value;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => onChanged(value),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
+            color: selected ? kMintAccent : Colors.transparent,
+            borderRadius: BorderRadius.circular(11),
+          ),
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: selected ? Colors.black : kTextSecondary,
             ),
           ),
-        ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PlayerCard extends StatelessWidget {
+  final Player player;
+  final VoidCallback onTap;
+
+  const _PlayerCard({required this.player, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: kSurfaceColor,
+      borderRadius: BorderRadius.circular(18),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: kBorderColor),
+          ),
+          child: Row(
+            children: [
+              PositionBadge(posicion: player.posicion),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(player.nombre, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 2),
+                    Text(player.equipo, style: const TextStyle(fontSize: 13, color: kTextSecondary)),
+                  ],
+                ),
+              ),
+              Text(
+                '${(player.precio / 1000000).toStringAsFixed(2)} M€',
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(width: 6),
+              const Icon(Icons.chevron_right_rounded, color: kTextTertiary, size: 20),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -288,7 +392,10 @@ class _PrediccionScreenState extends State<PrediccionScreen> {
 
   Widget _buildBotonAlertas(BuildContext context) {
     if (_suscrito == null) {
-      return const SizedBox(height: 40, width: 40, child: CircularProgressIndicator(strokeWidth: 2));
+      return const SizedBox(
+        height: 52,
+        child: Center(child: SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))),
+      );
     }
 
     final activada = _suscrito!;
@@ -298,7 +405,7 @@ class _PrediccionScreenState extends State<PrediccionScreen> {
             width: 18,
             child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
           )
-        : Icon(activada ? Icons.notifications_active : Icons.notifications_off_outlined);
+        : Icon(activada ? Icons.notifications_active_rounded : Icons.notifications_none_rounded);
     final etiqueta = Text(activada ? 'Alertas de precio activadas' : 'Activar alertas de precio');
     final onPressed = (_cambiandoSuscripcion || currentFcmToken == null) ? null : _toggleSuscripcion;
 
@@ -313,22 +420,22 @@ class _PrediccionScreenState extends State<PrediccionScreen> {
   IconData _iconFor(String prediccion) {
     switch (prediccion) {
       case 'sube':
-        return Icons.trending_up;
+        return Icons.trending_up_rounded;
       case 'baja':
-        return Icons.trending_down;
+        return Icons.trending_down_rounded;
       default:
-        return Icons.trending_flat;
+        return Icons.trending_flat_rounded;
     }
   }
 
-  Color _colorFor(String prediccion, BuildContext context) {
+  Color _colorFor(String prediccion) {
     switch (prediccion) {
       case 'sube':
-        return Colors.green;
+        return kMintAccent;
       case 'baja':
-        return Colors.red;
+        return const Color(0xFFE85D6B);
       default:
-        return Theme.of(context).colorScheme.onSurfaceVariant;
+        return kTextSecondary;
     }
   }
 
@@ -337,64 +444,97 @@ class _PrediccionScreenState extends State<PrediccionScreen> {
     return Scaffold(
       appBar: AppBar(title: Text(widget.player.nombre)),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                CircleAvatar(
-                  radius: 12,
-                  backgroundColor: colorForPosicion(widget.player.posicion),
-                  child: Text(
-                    widget.player.posicion,
-                    style: const TextStyle(color: Colors.black, fontSize: 9, fontWeight: FontWeight.bold),
-                  ),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(18),
+                child: Row(
+                  children: [
+                    PositionBadge(posicion: widget.player.posicion, size: 44),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(widget.player.equipo, style: const TextStyle(fontSize: 14, color: kTextSecondary)),
+                          const SizedBox(height: 2),
+                          Text(
+                            '${(widget.player.precio / 1000000).toStringAsFixed(2)} M€',
+                            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 8),
-                Text(widget.player.equipo, style: Theme.of(context).textTheme.titleMedium),
-              ],
+              ),
             ),
-            const SizedBox(height: 8),
-            Text('Precio: ${(widget.player.precio / 1000000).toStringAsFixed(2)} M€'),
-            const SizedBox(height: 20),
+            const SizedBox(height: 14),
             _buildBotonAlertas(context),
-            const SizedBox(height: 24),
+            const SizedBox(height: 28),
             if (_error != null) Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
             if (_prediccion == null && _error == null) const Center(child: CircularProgressIndicator()),
             if (_prediccion != null)
               Card(
                 child: Padding(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(18),
                   child: Row(
                     children: [
-                      Icon(_iconFor(_prediccion!.prediccion), size: 40, color: _colorFor(_prediccion!.prediccion, context)),
+                      Container(
+                        width: 52,
+                        height: 52,
+                        decoration: BoxDecoration(
+                          color: _colorFor(_prediccion!.prediccion).withValues(alpha: 0.16),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(_iconFor(_prediccion!.prediccion), size: 28, color: _colorFor(_prediccion!.prediccion)),
+                      ),
                       const SizedBox(width: 16),
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(_prediccion!.prediccion.toUpperCase(),
-                              style: Theme.of(context).textTheme.headlineSmall),
-                          Text('Confianza: ${(_prediccion!.confianza * 100).toStringAsFixed(0)}%'),
+                          Text(
+                            _prediccion!.prediccion.toUpperCase(),
+                            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, letterSpacing: 0.3),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Confianza: ${(_prediccion!.confianza * 100).toStringAsFixed(0)}%',
+                            style: const TextStyle(color: kTextSecondary, fontSize: 13),
+                          ),
                         ],
                       ),
                     ],
                   ),
                 ),
               ),
-            const SizedBox(height: 32),
-            Text('Evolución de precio', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            if (_errorHistorial != null)
-              Text(_errorHistorial!, style: TextStyle(color: Theme.of(context).colorScheme.error))
-            else if (_historial == null)
-              const Center(child: CircularProgressIndicator())
-            else
-              PriceHistoryChart(precios: _historial!.precios),
-            const SizedBox(height: 32),
-            Text('Puntos por jornada', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            if (_errorHistorial == null && _historial != null) PointsHistoryChart(puntos: _historial!.puntos),
+            const SizedBox(height: 28),
+            const SectionLabel('Evolución de precio'),
+            const SizedBox(height: 10),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(8, 16, 16, 8),
+                child: _errorHistorial != null
+                    ? Text(_errorHistorial!, style: TextStyle(color: Theme.of(context).colorScheme.error))
+                    : _historial == null
+                        ? const Center(child: Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator()))
+                        : PriceHistoryChart(precios: _historial!.precios),
+              ),
+            ),
+            const SizedBox(height: 24),
+            const SectionLabel('Puntos por jornada'),
+            const SizedBox(height: 10),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(8, 16, 16, 8),
+                child: _errorHistorial != null || _historial == null
+                    ? const SizedBox(height: 40)
+                    : PointsHistoryChart(puntos: _historial!.puntos),
+              ),
+            ),
           ],
         ),
       ),
@@ -459,31 +599,38 @@ class _LineupScreenState extends State<LineupScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Optimizador (${widget.source == 'biwenger' ? 'Biwenger' : 'LaLiga Fantasy'})'),
+        title: Text('Optimizador · ${widget.source == 'biwenger' ? 'Biwenger' : 'LaLiga Fantasy'}'),
       ),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
         children: [
-          TextField(
-            controller: _presupuestoController,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(
-              labelText: 'Presupuesto (€)',
-              border: OutlineInputBorder(),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  TextField(
+                    controller: _presupuestoController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(labelText: 'Presupuesto (€)'),
+                  ),
+                  const SizedBox(height: 14),
+                  DropdownButtonFormField<String>(
+                    initialValue: _formacion,
+                    decoration: const InputDecoration(labelText: 'Formación'),
+                    dropdownColor: kSurfaceHighColor,
+                    items: _formaciones.map((f) => DropdownMenuItem(value: f, child: Text(f))).toList(),
+                    onChanged: (value) => setState(() => _formacion = value ?? _formacion),
+                  ),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 16),
-          DropdownButtonFormField<String>(
-            initialValue: _formacion,
-            decoration: const InputDecoration(labelText: 'Formación', border: OutlineInputBorder()),
-            items: _formaciones.map((f) => DropdownMenuItem(value: f, child: Text(f))).toList(),
-            onChanged: (value) => setState(() => _formacion = value ?? _formacion),
           ),
           const SizedBox(height: 16),
           FilledButton(
             onPressed: _loading ? null : _calcular,
             child: _loading
-                ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
                 : const Text('Calcular alineación óptima'),
           ),
           if (_error != null) ...[
@@ -493,16 +640,21 @@ class _LineupScreenState extends State<LineupScreen> {
           if (_resultado != null) ...[
             const SizedBox(height: 24),
             Card(
-              color: Theme.of(context).colorScheme.primaryContainer,
               child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                padding: const EdgeInsets.all(18),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('${_resultado!.formacion} — ${_resultado!.puntosEsperados.toStringAsFixed(1)} pts esperados',
-                        style: Theme.of(context).textTheme.titleMedium),
-                    const SizedBox(height: 4),
-                    Text('Presupuesto usado: ${(_resultado!.presupuestoUsado / 1000000).toStringAsFixed(2)} M€'),
+                    StatTile(label: 'Formación', value: _resultado!.formacion),
+                    StatTile(
+                      label: 'Pts. esperados',
+                      value: _resultado!.puntosEsperados.toStringAsFixed(1),
+                      valueColor: kMintAccent,
+                    ),
+                    StatTile(
+                      label: 'Presupuesto',
+                      value: '${(_resultado!.presupuestoUsado / 1000000).toStringAsFixed(1)}M€',
+                    ),
                   ],
                 ),
               ),
@@ -510,20 +662,45 @@ class _LineupScreenState extends State<LineupScreen> {
             const SizedBox(height: 16),
             PitchView(jugadores: _resultado!.jugadores),
             const SizedBox(height: 24),
-            Text('Detalle', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 4),
+            const SectionLabel('Detalle'),
+            const SizedBox(height: 10),
             ..._resultado!.jugadores.map(
-              (j) => ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: colorForPosicion(j.posicion),
-                  child: Text(
-                    j.posicion,
-                    style: const TextStyle(color: Colors.black, fontSize: 10, fontWeight: FontWeight.bold),
+              (j) => Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Material(
+                  color: kSurfaceColor,
+                  borderRadius: BorderRadius.circular(18),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(color: kBorderColor),
+                    ),
+                    child: Row(
+                      children: [
+                        PositionBadge(posicion: j.posicion),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(j.nombre, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                              const SizedBox(height: 2),
+                              Text(
+                                '${j.equipo} · ${j.puntosEsperados.toStringAsFixed(1)} pts',
+                                style: const TextStyle(fontSize: 13, color: kTextSecondary),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Text(
+                          '${(j.precio / 1000000).toStringAsFixed(2)} M€',
+                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-                title: Text(j.nombre),
-                subtitle: Text('${j.equipo} · ${j.puntosEsperados.toStringAsFixed(1)} pts esperados'),
-                trailing: Text('${(j.precio / 1000000).toStringAsFixed(2)} M€'),
               ),
             ),
           ],

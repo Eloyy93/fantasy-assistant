@@ -1,72 +1,193 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
-/// Tema oscuro con acento verde menta, inspirado en apps de datos de
-/// fantasy football (analiticafantasy.com): fondo casi negro, tarjetas gris
-/// oscuro, números grandes en blanco, verde menta para lo positivo.
-const kMintAccent = Color(0xFF1FE6A6);
-const _bgColor = Color(0xFF0B0D0C);
-const _cardColor = Color(0xFF171A19);
+/// Tema oscuro con acento verde menta y tipografía Inter, inspirado en
+/// apps de datos de fantasy football: fondo casi negro con un puntito de
+/// azul, tarjetas con borde sutil en vez de sombra plana, jerarquía
+/// tipográfica clara (no todo el mismo tamaño de letra gris).
+const kMintAccent = Color(0xFF21E6A4);
+const kBgColor = Color(0xFF0A0B0D);
+const kSurfaceColor = Color(0xFF16181B);
+const kSurfaceHighColor = Color(0xFF1D2023);
+const kBorderColor = Color(0xFF262A2E);
+const kTextSecondary = Color(0xFF9AA3A8);
+const kTextTertiary = Color(0xFF666E73);
 
 final fantasyTheme = ThemeData(
   useMaterial3: true,
   brightness: Brightness.dark,
+  fontFamily: GoogleFonts.inter().fontFamily,
+  textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme).copyWith(
+    headlineSmall: GoogleFonts.inter(fontSize: 24, fontWeight: FontWeight.w700, letterSpacing: -0.3),
+    titleLarge: GoogleFonts.inter(fontSize: 20, fontWeight: FontWeight.w700, letterSpacing: -0.2),
+    titleMedium: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w600),
+    bodyMedium: GoogleFonts.inter(fontSize: 14, color: kTextSecondary),
+    labelSmall: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.6),
+  ),
   colorScheme: ColorScheme.fromSeed(
     seedColor: kMintAccent,
     brightness: Brightness.dark,
   ).copyWith(
     primary: kMintAccent,
-    surface: _cardColor,
-    surfaceContainerHighest: _cardColor,
+    surface: kSurfaceColor,
+    surfaceContainerHighest: kSurfaceHighColor,
+    onSurfaceVariant: kTextSecondary,
+    outline: kBorderColor,
   ),
-  scaffoldBackgroundColor: _bgColor,
-  appBarTheme: const AppBarTheme(
-    backgroundColor: _bgColor,
+  scaffoldBackgroundColor: kBgColor,
+  appBarTheme: AppBarTheme(
+    backgroundColor: kBgColor,
     foregroundColor: Colors.white,
     centerTitle: false,
     elevation: 0,
     surfaceTintColor: Colors.transparent,
+    titleTextStyle: GoogleFonts.inter(fontSize: 19, fontWeight: FontWeight.w700, color: Colors.white),
   ),
   cardTheme: CardThemeData(
-    color: _cardColor,
+    color: kSurfaceColor,
     elevation: 0,
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+    margin: EdgeInsets.zero,
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(20),
+      side: const BorderSide(color: kBorderColor),
+    ),
   ),
+  dividerTheme: const DividerThemeData(color: kBorderColor, thickness: 1, space: 1),
   listTileTheme: const ListTileThemeData(iconColor: Colors.white70),
   inputDecorationTheme: InputDecorationTheme(
     filled: true,
-    fillColor: _cardColor,
-    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-  ),
-  segmentedButtonTheme: SegmentedButtonThemeData(
-    style: ButtonStyle(
-      backgroundColor: WidgetStateProperty.resolveWith(
-        (states) => states.contains(WidgetState.selected) ? kMintAccent : _cardColor,
-      ),
-      foregroundColor: WidgetStateProperty.resolveWith(
-        (states) => states.contains(WidgetState.selected) ? Colors.black : Colors.white70,
-      ),
-      side: const WidgetStatePropertyAll(BorderSide(color: Color(0xFF2A2E2C))),
+    fillColor: kSurfaceColor,
+    contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+    border: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(16),
+      borderSide: const BorderSide(color: kBorderColor),
     ),
+    enabledBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(16),
+      borderSide: const BorderSide(color: kBorderColor),
+    ),
+    focusedBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(16),
+      borderSide: const BorderSide(color: kMintAccent, width: 1.5),
+    ),
+    labelStyle: const TextStyle(color: kTextSecondary),
+    hintStyle: const TextStyle(color: kTextTertiary),
   ),
   filledButtonTheme: FilledButtonThemeData(
-    style: FilledButton.styleFrom(backgroundColor: kMintAccent, foregroundColor: Colors.black),
+    style: FilledButton.styleFrom(
+      backgroundColor: kMintAccent,
+      foregroundColor: Colors.black,
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      textStyle: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 15),
+    ),
+  ),
+  outlinedButtonTheme: OutlinedButtonThemeData(
+    style: OutlinedButton.styleFrom(
+      foregroundColor: Colors.white,
+      side: const BorderSide(color: kBorderColor),
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      textStyle: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 15),
+    ),
+  ),
+  dropdownMenuTheme: DropdownMenuThemeData(
+    textStyle: GoogleFonts.inter(color: Colors.white),
+    menuStyle: MenuStyle(
+      backgroundColor: const WidgetStatePropertyAll(kSurfaceHighColor),
+      shape: WidgetStatePropertyAll(RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
+    ),
   ),
 );
 
-/// Color por posición, usado en las insignias de jugador (buscador, campo,
-/// pantalla de predicción). Mismos tonos vivos, pensados para leerse bien
-/// sobre fondo oscuro.
+/// Color por posición: dorado=portero, azul=defensa, menta=medio, rojo=delantero.
 Color colorForPosicion(String posicion) {
   switch (posicion) {
     case 'POR':
-      return const Color(0xFFE8A63C); // dorado, típico de portero
+      return const Color(0xFFE8B23C);
     case 'DEF':
-      return const Color(0xFF4C82E8); // azul
+      return const Color(0xFF4C8CE8);
     case 'MED':
       return kMintAccent;
     case 'DEL':
-      return const Color(0xFFE85D5D); // rojo
+      return const Color(0xFFE85D6B);
     default:
-      return Colors.grey;
+      return kTextSecondary;
+  }
+}
+
+/// Chip de posición: fondo tintado translúcido + texto del color de la
+/// posición, en vez de un círculo relleno — más fino, mismo lenguaje que
+/// las apps de datos de fantasy (etiquetas discretas, no iconos grandes).
+class PositionBadge extends StatelessWidget {
+  final String posicion;
+  final double size;
+
+  const PositionBadge({super.key, required this.posicion, this.size = 34});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = colorForPosicion(posicion);
+    return Container(
+      width: size,
+      height: size,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(size * 0.3),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Text(
+        posicion,
+        style: TextStyle(color: color, fontSize: size * 0.29, fontWeight: FontWeight.w800, letterSpacing: 0.2),
+      ),
+    );
+  }
+}
+
+/// Una pequeña estadística en formato "etiqueta arriba, valor grande abajo",
+/// usada para desglosar resultados (formación, puntos, presupuesto...) en
+/// vez de meterlo todo en un párrafo de texto corrido.
+class StatTile extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color? valueColor;
+
+  const StatTile({super.key, required this.label, required this.value, this.valueColor});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(label.toUpperCase(), style: Theme.of(context).textTheme.labelSmall?.copyWith(color: kTextTertiary)),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: valueColor ?? Colors.white),
+        ),
+      ],
+    );
+  }
+}
+
+/// Encabezado de sección: etiqueta pequeña en mayúsculas gris, para separar
+/// bloques de contenido sin recurrir a títulos grandes constantes.
+class SectionLabel extends StatelessWidget {
+  final String text;
+  const SectionLabel(this.text, {super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      text.toUpperCase(),
+      style: const TextStyle(
+        color: kTextTertiary,
+        fontSize: 12,
+        fontWeight: FontWeight.w700,
+        letterSpacing: 0.8,
+      ),
+    );
   }
 }
