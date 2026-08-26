@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "191835506057",
+    "project_id": "fantasy-assistant-a69ba",
+    "storage_bucket": "fantasy-assistant-a69ba.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:191835506057:android:c20990f021fa4bbcbccd58",
+        "android_client_info": {
+          "package_name": "com.eloy.fantasyassistant.fantasy_assistant_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDTyalfXemyFd4oudvhu-zMEzvoUXfkYPc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,9 +1,40 @@
 import 'dart:async';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 
 import 'api_client.dart';
 
+Future<void> _setupPushNotifications() async {
+  await Firebase.initializeApp();
+  final messaging = FirebaseMessaging.instance;
+
+  await messaging.requestPermission();
+
+  final token = await messaging.getToken();
+
+  print('[push] FCM token: $token');
+  if (token != null) {
+    try {
+      await FantasyApiClient().registerDevice(token);
+      print('[push] Dispositivo registrado en el backend');
+    } catch (e) {
+      print('[push] Fallo registrando dispositivo: $e');
+      // Sin conexión al arrancar: no bloquea la app, simplemente no
+      // recibirá push hasta el próximo arranque con red.
+    }
+  }
+
+  // Si el token rota (reinstalación, cambio de dispositivo, etc.), Firebase
+  // emite uno nuevo: hay que re-registrarlo.
+  FirebaseMessaging.instance.onTokenRefresh.listen((newToken) {
+    FantasyApiClient().registerDevice(newToken).catchError((_) {});
+  });
+}
+
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  unawaited(_setupPushNotifications());
   runApp(const FantasyAssistantApp());
 }
 

@@ -86,4 +86,15 @@ class FantasyApiClient {
     }
     return Prediccion.fromJson(jsonDecode(utf8.decode(response.bodyBytes)));
   }
+
+  Future<void> registerDevice(String fcmToken) async {
+    final uri = Uri.parse('$baseUrl/devices');
+    await http
+        .post(
+          uri,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'fcm_token': fcmToken}),
+        )
+        .timeout(const Duration(seconds: 10));
+  }
 }

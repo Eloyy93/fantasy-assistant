@@ -17,7 +17,9 @@ from fantasy_assistant.config import config
 from fantasy_assistant.datasources import get_data_source
 from fantasy_assistant.datasources.base import FantasyDataSource, Player
 from fantasy_assistant.db.database import get_session, init_db
-from fantasy_assistant.db.models import PlayerRecord, PointsHistory, PriceHistory
+from fantasy_assistant.db.models import DeviceRegistration, PlayerRecord, PointsHistory, PriceHistory
+from fantasy_assistant.modules import alerts
+from fantasy_assistant.notifications import fcm
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -33,6 +35,7 @@ def sync_once(source: FantasyDataSource | None = None) -> int:
     source = source or get_data_source()
     players: list[Player] = source.get_all_players()
     today = dt.date.today()
+    disparadas: list[alerts.Alert] = []
 
     with get_session() as session:
         for p in players:
@@ -40,6 +43,9 @@ def sync_once(source: FantasyDataSource | None = None) -> int:
 
             existing = session.get(PlayerRecord, record_id)
             if existing:
+                alert = alerts.check_price_change(record_id, p.nombre, existing.precio, p.precio)
+                if alert:
+                    disparadas.append(alert)
                 existing.nombre = p.nombre
                 existing.equipo = p.equipo
                 existing.posicion = p.posicion
@@ -62,8 +68,24 @@ def sync_once(source: FantasyDataSource | None = None) -> int:
             for entry in source.get_player_points_history(p.id):
                 _upsert_points(session, record_id, p.source, entry.jornada, entry.puntos)
 
+        if disparadas:
+            _send_alerts(session, disparadas)
+
     logger.info("Sincronizados %d jugadores (fuente=%s)", len(players), config.fantasy_source)
     return len(players)
+
+
+def _send_alerts(session, alertas_disparadas: list[alerts.Alert]) -> None:
+    tokens = session.execute(select(DeviceRegistration.fcm_token)).scalars().all()
+    if not tokens:
+        return
+
+    invalid_tokens = fcm.send_alerts(alertas_disparadas, list(tokens))
+    if invalid_tokens:
+        session.execute(
+            DeviceRegistration.__table__.delete().where(DeviceRegistration.fcm_token.in_(invalid_tokens))
+        )
+    logger.info("Enviadas %d alertas a %d dispositivos", len(alertas_disparadas), len(tokens))
 
 
 def _upsert_price_snapshot(session, player_id: str, source: str, fecha: dt.date, precio: int) -> None:
@@ -91,8 +113,6 @@ def _upsert_points(session, player_id: str, source: str, jornada: int, puntos: i
 
 
 def run_scheduler() -> None:
-    # TODO fase 3: tras cada sync_once() llamar a modules/alerts.py para
-    # comparar contra el snapshot anterior y disparar alertas por Telegram.
     from apscheduler.schedulers.blocking import BlockingScheduler
 
     scheduler = BlockingScheduler(timezone="UTC")

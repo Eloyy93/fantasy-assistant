@@ -35,6 +35,16 @@ class Config:
         default_factory=lambda: _float_env("PRICE_PREDICTOR_DOWN_THRESHOLD", 0.85)
     )
 
+    # % de cambio de precio (entre dos sincronizaciones) a partir del cual se dispara una alerta push
+    price_change_alert_threshold: float = field(
+        default_factory=lambda: _float_env("PRICE_CHANGE_ALERT_THRESHOLD", 0.03)
+    )
+
+    # Ruta a la clave de cuenta de servicio de Firebase (JSON), para enviar notificaciones push
+    firebase_credentials_path: str = field(default_factory=lambda: os.getenv("FIREBASE_CREDENTIALS_PATH", ""))
+    # Alternativa: el JSON completo de la cuenta de servicio como string (más cómodo en Railway)
+    firebase_credentials_json: str = field(default_factory=lambda: os.getenv("FIREBASE_CREDENTIALS_JSON", ""))
+
     def __post_init__(self) -> None:
         if self.fantasy_source not in ("biwenger", "laligafantasy"):
             raise ValueError(
