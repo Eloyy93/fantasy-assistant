@@ -1,43 +1,43 @@
 """Adaptador para LaLiga Fantasy (Relevo, antes Marca).
 
-API no oficial, sin documentación pública de LALIGA. Endpoints y forma de
-los datos confirmados a partir de proyectos open-source que ya la habían
-reverse-engineered (varios repos públicos en GitHub referencian el mismo
-host `api-fantasy.llt-services.com`, verificados contra la API real en
-fechas recientes) — no directamente por mí en este entorno, porque el
-backend de LALIGA está devolviendo 502 (Azure Application Gateway) en el
-momento de escribir esto. Trátese como implementado-pero-no-verificado en
-vivo hasta la primera sincronización real.
+La API oficial no documentada (`api-fantasy.llt-services.com`) lleva caída
+—502 de Azure Application Gateway, verificado con curl y con navegador real,
+con y sin cabeceras de la app oficial— desde que se investigó por primera
+vez este adaptador. En vez de depender de que LALIGA arregle su backend,
+`get_all_players()` y `get_player_price_history()` sacan los datos de
+`futbolfantasy.com`, un sitio de estadísticas de fantasy que sí tiene el
+mercado actualizado (verificado: su "última actualización" es de horas
+antes de escribir esto, no datos congelados).
+
+Su tabla de mercado viene enteramente renderizada en el HTML servido por el
+servidor — sin JavaScript de por medio — con cada fila `<tr>` llevando el id,
+nombre, posición, precio actual **y precios de hace 1/2/3/7/14/30 días**
+como atributos `data-*`. Eso nos da precio actual e histórico en una sola
+petición, sin necesitar un navegador headless ni pegar 670 peticiones (una
+por jugador). `robots.txt` de futbolfantasy.com es permisivo (`Disallow:`
+vacío) y esto hace como mucho una petición cada 3h — tráfico mínimo.
+
+# TODO: si LALIGA arregla su API oficial, sería más correcto volver a ella
+# en vez de depender del HTML de un tercero (más frágil: se rompe si
+# cambian las clases/atributos de su tabla).
 
 Cobertura:
-- get_all_players(): sí, endpoint público `/api/v5/players`, sin auth.
-- get_player_price_history(): sí, endpoint público `/api/v3/player/{id}/market-value`,
-  pero el nombre exacto de los campos del JSON no está confirmado (no pude
-  verlo en vivo) — el parseo prueba varios nombres razonables y, si no
-  encaja ninguno, devuelve lista vacía en vez de reventar.
-- get_player_points_history(): no se encontró ningún endpoint público con
-  puntos por jornada; solo el acumulado de temporada, que ya viene en
-  get_all_players(). Devuelve lista vacía.
-- login() / get_user_team(): requieren ROPC (Resource Owner Password
-  Credentials) contra un tenant B2C de Azure AD — flujo de autenticación
-  real de usuario, no una API key. No implementado: además de la
-  complejidad, un proyecto que reverse-engineered esto en detalle (agosto
-  2026) documentó que había bloqueado explícitamente esa parte "hasta
-  autorización escrita de LALIGA". Aplico la misma cautela aquí — se deja
-  como TODO fase 2b, a decidir conscientemente, no un simple "falta tiempo".
-
-# TODO fase 2b: login() vía ROPC si se decide seguir adelante con ello
-# (LALIGAFANTASY_CLIENT_ID / LALIGAFANTASY_CLIENT_SECRET en .env), y
-# get_user_team() sobre /api/v4/leagues + /api/v4/leagues/{id}/teams/{id}.
-# TODO: resolver nombre de equipo real a partir de teamId — no se encontró
-# endpoint público de catálogo de equipos; de momento `equipo` es el
-# teamId tal cual.
+- get_all_players(): sí, vía scraping de futbolfantasy.com.
+- get_player_price_history(): sí, histórico de 30 días de la misma tabla.
+- get_player_points_history(): no se encontró ninguna fuente pública con
+  puntos por jornada de LaLiga Fantasy. Devuelve lista vacía.
+- login() / get_user_team(): sin implementar a propósito — requieren ROPC
+  contra un tenant B2C de Azure AD, no una API key, y sigue sin resolverse
+  la decisión consciente de si merece la pena perseguir eso (ver TODO
+  histórico más abajo).
 """
 from __future__ import annotations
 
+import datetime as dt
 import logging
 
 import requests
+from bs4 import BeautifulSoup
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from fantasy_assistant.datasources.base import (
@@ -51,11 +51,17 @@ from fantasy_assistant.datasources.base import (
 
 logger = logging.getLogger(__name__)
 
-BASE_URL = "https://api-fantasy.llt-services.com"
+MARKET_URL = "https://www.futbolfantasy.com/analytics/laliga-fantasy/mercado"
 
-# Mismo convenio que Biwenger (1=portero..4=delantero), consistente con los
-# ejemplos de payload documentados por varios de estos proyectos.
-POSITION_MAP = {1: "POR", 2: "DEF", 3: "MED", 4: "DEL"}
+POSITION_MAP_ES = {
+    "Portero": "POR",
+    "Defensa": "DEF",
+    "Mediocampista": "MED",
+    "Delantero": "DEL",
+}
+
+# data-valorN = precio hace N días (aproximado a partir de hoy).
+HISTORIAL_DIAS = (1, 2, 3, 7, 14, 30)
 
 SOURCE_NAME = "laligafantasy"
 
@@ -64,6 +70,10 @@ class LaLigaFantasyAdapter(FantasyDataSource):
     def __init__(self, session: requests.Session | None = None) -> None:
         self._http = session or requests.Session()
         self._http.headers.update({"User-Agent": "Mozilla/5.0 (fantasy-assistant)"})
+        # Caché del último scrape del mercado, para no repetir la petición
+        # una vez por jugador al pedir el histórico justo después de
+        # get_all_players() (patrón habitual en jobs/sync_data.py).
+        self._market_cache: dict[str, dict] = {}
 
     @retry(
         reraise=True,
@@ -71,67 +81,78 @@ class LaLigaFantasyAdapter(FantasyDataSource):
         wait=wait_exponential(multiplier=1, min=1, max=20),
         retry=retry_if_exception_type((requests.ConnectionError, requests.Timeout, requests.HTTPError)),
     )
-    def _get(self, path: str, **kwargs) -> object:
-        resp = self._http.get(f"{BASE_URL}{path}", timeout=15, **kwargs)
-        if resp.status_code in (429, 502, 503):
-            raise requests.HTTPError(f"LaLiga Fantasy no disponible temporalmente: {resp.status_code}")
+    def _fetch_market(self) -> dict[str, dict]:
+        resp = self._http.get(MARKET_URL, timeout=20)
         resp.raise_for_status()
-        return resp.json()
+        soup = BeautifulSoup(resp.text, "html.parser")
+
+        jugadores: dict[str, dict] = {}
+        for row in soup.select("tr[data-id]"):
+            player_id = row.get("data-id")
+            if not player_id:
+                continue
+
+            nombre_el = row.select_one(".player-info span") or row.select_one(".player-info")
+            equipo_el = row.select_one(".player-equipo")
+
+            jugadores[player_id] = {
+                "id": player_id,
+                "nombre": (nombre_el.get_text(strip=True) if nombre_el else row.get("data-nombre", "")),
+                "equipo": equipo_el.get_text(strip=True) if equipo_el else "",
+                "posicion_raw": row.get("data-posicion", ""),
+                "valor": row.get("data-valor"),
+                **{f"valor{d}": row.get(f"data-valor{d}") for d in HISTORIAL_DIAS},
+            }
+
+        self._market_cache = jugadores
+        return jugadores
 
     def get_all_players(self) -> list[Player]:
-        payload = self._get("/api/v5/players", params={"x-lang": "es"})
+        jugadores = self._fetch_market()
         players: list[Player] = []
-        for raw in payload:
+        for raw in jugadores.values():
             try:
-                position_id = int(raw.get("positionId", 0))
+                precio = int(raw["valor"]) if raw["valor"] else 0
             except (TypeError, ValueError):
-                position_id = 0
+                precio = 0
             players.append(
                 Player(
-                    id=str(raw.get("id")),
+                    id=raw["id"],
                     source=SOURCE_NAME,
-                    nombre=raw.get("nickname", ""),
-                    # TODO: sin catálogo público de equipos confirmado, se
-                    # deja el teamId tal cual en vez de inventar un nombre.
-                    equipo=str(raw.get("teamId", "")),
-                    posicion=POSITION_MAP.get(position_id, "UNK"),
-                    precio=int(raw.get("marketValue") or 0),
+                    nombre=raw["nombre"],
+                    equipo=raw["equipo"],
+                    posicion=POSITION_MAP_ES.get(raw["posicion_raw"], "UNK"),
+                    precio=precio,
                 )
             )
         return players
 
     def get_player_price_history(self, player_id: str) -> list[PricePoint]:
-        payload = self._get(f"/api/v3/player/{player_id}/market-value", params={"x-lang": "es"})
-        if not isinstance(payload, list):
-            logger.warning("market-value de %s no es una lista, forma inesperada: %s", player_id, type(payload))
+        if not self._market_cache:
+            self._fetch_market()
+
+        raw = self._market_cache.get(player_id)
+        if not raw:
             return []
 
+        hoy = dt.date.today()
         puntos: list[PricePoint] = []
-        for entry in payload:
-            if not isinstance(entry, dict):
-                continue
-            fecha = entry.get("date") or entry.get("fecha") or entry.get("day")
-            precio = entry.get("marketValue") or entry.get("value") or entry.get("valor")
-            if fecha is None or precio is None:
+        for dias in HISTORIAL_DIAS:
+            valor = raw.get(f"valor{dias}")
+            if not valor:
                 continue
             try:
-                puntos.append(PricePoint(fecha=str(fecha), precio=int(precio)))
+                precio = int(valor)
             except (TypeError, ValueError):
                 continue
+            fecha = hoy - dt.timedelta(days=dias)
+            puntos.append(PricePoint(fecha=fecha.isoformat(), precio=precio))
 
-        if not puntos and payload:
-            logger.warning(
-                "market-value de %s: no se reconoció ningún campo de fecha/precio esperado en %s",
-                player_id,
-                list(payload[0].keys()) if isinstance(payload[0], dict) else payload[0],
-            )
-        return puntos
+        return sorted(puntos, key=lambda p: p.fecha)
 
     def get_player_points_history(self, player_id: str) -> list[PointsEntry]:
-        # No se encontró endpoint público con el desglose de puntos por
-        # jornada (solo el acumulado de temporada, que ya viene en el
-        # listado de jugadores). sync_data.py sigue funcionando sin esto,
-        # simplemente sin histórico jornada a jornada para esta fuente.
+        # No se encontró ninguna fuente pública con puntos por jornada de
+        # LaLiga Fantasy (solo el acumulado de temporada, no desglosado).
         return []
 
     def requires_auth_for_team(self) -> bool:

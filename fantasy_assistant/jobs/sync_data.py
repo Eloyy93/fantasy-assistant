@@ -65,13 +65,20 @@ def sync_once(source: FantasyDataSource | None = None) -> int:
 
             _upsert_price_snapshot(session, record_id, p.source, today, p.precio)
 
+            # Histórico extra que algunas fuentes puedan ofrecer (ej. LaLiga
+            # Fantasy da hasta 30 días de precios en la misma petición que
+            # el listado de jugadores). Biwenger devuelve lista vacía aquí.
+            for punto in source.get_player_price_history(p.id):
+                _upsert_price_snapshot(session, record_id, p.source, dt.date.fromisoformat(punto.fecha), punto.precio)
+
             for entry in source.get_player_points_history(p.id):
                 _upsert_points(session, record_id, p.source, entry.jornada, entry.puntos)
 
         if disparadas:
             _send_alerts(session, disparadas)
 
-    logger.info("Sincronizados %d jugadores (fuente=%s)", len(players), config.fantasy_source)
+    fuente = players[0].source if players else config.fantasy_source
+    logger.info("Sincronizados %d jugadores (fuente=%s)", len(players), fuente)
     return len(players)
 
 
