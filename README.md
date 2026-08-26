@@ -50,7 +50,7 @@ uvicorn fantasy_assistant.api.main:app --reload
 | Componente | Estado |
 |---|---|
 | `BiwengerAdapter` | Funcionando (datos públicos de jugadores, sin auth) |
-| `LaLigaFantasyAdapter` | Jugadores + histórico de precio funcionando (endpoints públicos); login de usuario pendiente a propósito (fase 2b, ver abajo) |
+| `LaLigaFantasyAdapter` | Jugadores + histórico de precio funcionando de verdad (scraping de futbolfantasy.com, ver abajo); login de usuario pendiente a propósito (fase 2b) |
 | Módulo 1 — Predictor de precio | Funcionando (reglas simples) |
 | Módulo 2 — Optimizador de alineación | Funcionando (mochila por posición sobre todo el mercado) |
 | Módulo 3 — Alertas | Funcionando: push por jugador, solo a los dispositivos suscritos a ese jugador concreto |
@@ -110,19 +110,28 @@ una), resuelto con programación dinámica en `modules/lineup_optimizer.py`.
 ya implementado en `BiwengerAdapter`) en vez de un presupuesto manual, para
 no sugerir comprar jugadores que ya tiene.
 
-## LaLiga Fantasy — qué falta y por qué
+## LaLiga Fantasy — de dónde salen los datos y por qué
 
-`get_all_players()` y `get_player_price_history()` funcionan de verdad
-contra los endpoints públicos de `api-fantasy.llt-services.com` (sin
-credenciales). El parseo está verificado contra el schema real documentado
-por terceros que ya la habían reverse-engineered, pero no pude probar la
-llamada HTTP en vivo — el backend de LALIGA devolvía 502 en el momento de
-escribir esto (caída de su lado). Antes de sincronizar con esta fuente por
-primera vez, comprueba que funciona:
+La API oficial no documentada (`api-fantasy.llt-services.com`) lleva caída
+desde que se investigó por primera vez este adaptador — 502 de Azure
+Application Gateway, confirmado con `curl` y con navegador real, con y sin
+cabeceras de la app oficial. Es una caída de infraestructura real de
+LALIGA, no un bloqueo selectivo: afecta a cualquiera, headers aparte.
 
-```bash
-FANTASY_SOURCE=laligafantasy python -m fantasy_assistant.jobs.sync_data
-```
+En vez de esperar sin plazo a que lo arreglen, `get_all_players()` y
+`get_player_price_history()` sacan los datos de **futbolfantasy.com**: su
+tabla de mercado viene enteramente renderizada en el HTML que sirve el
+servidor (sin JavaScript de por medio), y cada fila `<tr>` lleva el id,
+nombre, posición, precio actual **y precios de hace 1/2/3/7/14/30 días**
+como atributos `data-*`. Una sola petición cada 3h nos da los ~670
+jugadores y hasta 6 puntos de histórico de precio de golpe — verificado
+con datos reales en producción. `robots.txt` de futbolfantasy.com es
+permisivo (`Disallow:` vacío); a una petición cada 3h es tráfico mínimo.
+
+Si LALIGA arregla su API oficial en algún momento, sería más correcto
+volver a ella (más estable que depender del HTML de un tercero, que se
+rompe si cambian las clases de su tabla) — queda como TODO en el propio
+adaptador.
 
 `login()` / `get_user_team()` siguen sin implementar **a propósito**, no
 por falta de tiempo: requieren un flujo ROPC completo contra un tenant B2C
@@ -131,9 +140,9 @@ fuentes consultadas para documentar esto había bloqueado explícitamente esa
 parte de su propio proyecto "hasta autorización escrita de LALIGA". Antes
 de implementarlo, vale la pena decidir conscientemente si seguir adelante.
 
-No se encontró tampoco ningún endpoint público con el nombre real de cada
-equipo (solo `teamId`) ni con los puntos por jornada (solo el acumulado de
-temporada) — quedan documentados como TODO en el propio adaptador.
+No se encontró ninguna fuente pública con puntos por jornada de LaLiga
+Fantasy (solo el acumulado de temporada) — queda documentado como TODO en
+el propio adaptador.
 
 ## Arquitectura
 
