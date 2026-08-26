@@ -38,9 +38,10 @@ LOGIN_URL = f"{BASE_URL}/auth/login"
 
 # get_player_price_history hace una petición extra por jugador (no viene en
 # get_all_players) — este margen evita saturar la API con ~567 peticiones
-# seguidas. Verificado sin rate-limiting en ráfagas de 70 peticiones, pero
-# se deja un margen prudente para una sincronización completa.
-PRICE_HISTORY_THROTTLE_SECONDS = 0.15
+# seguidas. 0.15s pareció seguro en ráfagas cortas (70 peticiones) pero
+# Biwenger rate-limitó igualmente a mitad de una sincronización completa
+# (567 jugadores) — subido a 1s tras esa prueba real.
+PRICE_HISTORY_THROTTLE_SECONDS = 1.0
 
 # Códigos de posición usados por Biwenger, traducidos a abreviaturas en castellano.
 POSITION_MAP = {1: "POR", 2: "DEF", 3: "MED", 4: "DEL"}
@@ -52,6 +53,10 @@ class BiwengerAdapter(FantasyDataSource):
     def __init__(self, session: requests.Session | None = None) -> None:
         self._http = session or requests.Session()
         self._http.headers.update({"User-Agent": "Mozilla/5.0 (fantasy-assistant)"})
+        # Se activa en cuanto Biwenger devuelve un 429 en get_player_price_history,
+        # para dejar de pedir histórico al resto de jugadores de esta
+        # sincronización (ver comentario en ese método).
+        self._price_history_blocked = False
 
     @retry(
         reraise=True,
@@ -90,15 +95,27 @@ class BiwengerAdapter(FantasyDataSource):
 
     @retry(
         reraise=True,
-        stop=stop_after_attempt(4),
-        wait=wait_exponential(multiplier=1, min=1, max=20),
-        retry=retry_if_exception_type((requests.ConnectionError, requests.Timeout, requests.HTTPError)),
+        stop=stop_after_attempt(2),
+        wait=wait_exponential(multiplier=1, min=1, max=5),
+        retry=retry_if_exception_type((requests.ConnectionError, requests.Timeout)),
     )
     def get_player_price_history(self, player_id: str) -> list[PricePoint]:
         # Descubierto por prueba y error: el endpoint público de ficha de
         # jugador SÍ da histórico de precio (365 días, uno por día) si se
         # piden explícitamente los campos "prices" — no viene si no se pide.
         # Formato de cada punto: [fecha_YYMMDD, precio].
+        #
+        # ¡Ojo! No reintentar 429 con backoff exponencial como el resto de
+        # peticiones: verificado en producción que Biwenger rate-limita esta
+        # ruta con bastante agresividad (un margen de 0.15s entre peticiones
+        # ya lo disparó a mitad de sync), y reintentar cada jugador varias
+        # veces con esperas crecientes convirtió una sincronización de
+        # minutos en una de más de una hora, con 450/567 jugadores fallando
+        # igualmente. Si llega un 429, nos rendimos para este jugador ya
+        # (sin reintentar) — se recupera solo en la siguiente sincronización.
+        if self._price_history_blocked:
+            return []
+
         time.sleep(PRICE_HISTORY_THROTTLE_SECONDS)
         resp = self._http.get(
             PLAYER_URL.format(player_id=player_id),
@@ -106,6 +123,13 @@ class BiwengerAdapter(FantasyDataSource):
             timeout=15,
         )
         if resp.status_code == 404:
+            return []
+        if resp.status_code == 429:
+            # Una vez rate-limitados, es casi seguro que el resto de
+            # peticiones de esta sincronización también lo estarán —dejar de
+            # intentarlo en vez de encadenar cientos de 429 más.
+            logger.warning("Biwenger rate-limitó el histórico de precio (429) — se omite el resto de esta sincronización")
+            self._price_history_blocked = True
             return []
         resp.raise_for_status()
         prices = resp.json().get("data", {}).get("prices") or []

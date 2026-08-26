@@ -118,9 +118,18 @@ no sugerir comprar jugadores que ya tiene.
 El endpoint público de ficha de jugador (`/players/la-liga/{id}`) no incluye
 histórico de precio por defecto, pero si se piden explícitamente los
 `fields=id,prices` sí lo devuelve — 365 días, uno por día. Es una petición
-extra por jugador (no viene en el listado general), con un pequeño margen
-entre peticiones para no saturar la API — igual que el patrón ya usado con
-LaLiga Fantasy (ver más abajo).
+extra por jugador (no viene en el listado general).
+
+Biwenger rate-limita esta ruta con bastante agresividad — verificado en
+producción: ni siquiera 1s de margen entre peticiones bastó para evitar un
+429 a los pocos jugadores. `get_player_price_history()` no reintenta un 429
+con backoff (eso fue lo que convirtió una sincronización de minutos en una
+de más de una hora, con la mayoría de jugadores fallando igual): en cuanto
+llega el primer 429, se rinde para el resto de esa sincronización entera.
+`sync_data.sync_once()` mezcla el orden de los jugadores en cada
+sincronización para que, con el tiempo (una cada 3h), todos acaben
+consiguiendo histórico aunque ninguna sincronización individual llegue a
+completarlos todos.
 
 ## LaLiga Fantasy — de dónde salen los datos y por qué
 

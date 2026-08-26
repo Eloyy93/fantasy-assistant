@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import logging
+import random
 
 from sqlalchemy import select
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
@@ -34,6 +35,15 @@ def sync_once(source: FantasyDataSource | None = None) -> int:
     disponible. Devuelve el número de jugadores sincronizados."""
     source = source or get_data_source()
     players: list[Player] = source.get_all_players()
+    # Mezclar el orden: algunas fuentes (Biwenger) hacen una petición extra
+    # por jugador para el histórico de precio y pueden toparse con
+    # rate-limiting a mitad de sync, dejando de intentarlo con los que
+    # queden por delante (ver BiwengerAdapter.get_player_price_history). Sin
+    # mezclar, siempre serían los mismos jugadores (los primeros del listado)
+    # los que consiguen histórico y los últimos los que nunca lo consiguen.
+    # Mezclando, con varias sincronizaciones (cada 3h) se acaba cubriendo a
+    # todos aunque cada una individual no llegue a completarlos.
+    random.shuffle(players)
     today = dt.date.today()
     disparadas: list[alerts.Alert] = []
 
