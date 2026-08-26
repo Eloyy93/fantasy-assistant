@@ -4,6 +4,8 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 
 import 'api_client.dart';
+import 'pitch_view.dart';
+import 'theme.dart';
 
 /// Token FCM de este dispositivo, disponible tras arrancar la app. Nulo
 /// hasta que _setupPushNotifications() termine (o si Firebase falla).
@@ -51,10 +53,7 @@ class FantasyAssistantApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Fantasy Assistant',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepOrange),
-        useMaterial3: true,
-      ),
+      theme: fantasyTheme,
       home: const PlayerSearchScreen(),
     );
   }
@@ -178,8 +177,15 @@ class _PlayerSearchScreenState extends State<PlayerSearchScreen> {
               itemBuilder: (context, index) {
                 final player = _players[index];
                 return ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: colorForPosicion(player.posicion),
+                    child: Text(
+                      player.posicion,
+                      style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                    ),
+                  ),
                   title: Text(player.nombre),
-                  subtitle: Text('${player.equipo} · ${player.posicion}'),
+                  subtitle: Text(player.equipo),
                   trailing: Text('${(player.precio / 1000000).toStringAsFixed(2)} M€'),
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute(builder: (_) => PrediccionScreen(player: player, api: _api)),
@@ -320,8 +326,20 @@ class _PrediccionScreenState extends State<PrediccionScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('${widget.player.equipo} · ${widget.player.posicion}',
-                style: Theme.of(context).textTheme.titleMedium),
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 12,
+                  backgroundColor: colorForPosicion(widget.player.posicion),
+                  child: Text(
+                    widget.player.posicion,
+                    style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(widget.player.equipo, style: Theme.of(context).textTheme.titleMedium),
+              ],
+            ),
             const SizedBox(height: 8),
             Text('Precio: ${(widget.player.precio / 1000000).toStringAsFixed(2)} M€'),
             const SizedBox(height: 20),
@@ -461,10 +479,20 @@ class _LineupScreenState extends State<LineupScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 16),
+            PitchView(jugadores: _resultado!.jugadores),
+            const SizedBox(height: 24),
+            Text('Detalle', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 4),
             ..._resultado!.jugadores.map(
               (j) => ListTile(
-                leading: CircleAvatar(child: Text(j.posicion)),
+                leading: CircleAvatar(
+                  backgroundColor: colorForPosicion(j.posicion),
+                  child: Text(
+                    j.posicion,
+                    style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                  ),
+                ),
                 title: Text(j.nombre),
                 subtitle: Text('${j.equipo} · ${j.puntosEsperados.toStringAsFixed(1)} pts esperados'),
                 trailing: Text('${(j.precio / 1000000).toStringAsFixed(2)} M€'),
