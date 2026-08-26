@@ -1,7 +1,9 @@
-# Fantasy Assistant
+# Fantasy Assistant (app: Master Fantasy)
 
 Asistente para gestionar una plantilla de fútbol fantasy (LaLiga), con dos
-fuentes de datos intercambiables: **Biwenger** y **LaLiga Fantasy**.
+fuentes de datos intercambiables: **Biwenger** y **LaLiga Fantasy**. El
+backend/repo sigue llamándose Fantasy Assistant; la app Android que ve el
+usuario se llama **Master Fantasy** (nombre + icono en `app/`).
 
 Interfaz **única**: app Android (Flutter) en `app/`, hablando contra la API
 REST de este repo, con notificaciones push (Firebase Cloud Messaging) por
@@ -49,7 +51,7 @@ uvicorn fantasy_assistant.api.main:app --reload
 
 | Componente | Estado |
 |---|---|
-| `BiwengerAdapter` | Funcionando (datos públicos de jugadores, sin auth) |
+| `BiwengerAdapter` | Funcionando: jugadores + histórico de precio real (365 días, ver abajo), sin auth |
 | `LaLigaFantasyAdapter` | Jugadores + histórico de precio + puntos esperados funcionando de verdad (scraping de futbolfantasy.com, ver abajo); login de usuario pendiente a propósito (fase 2b) |
 | Módulo 1 — Predictor de precio | Funcionando (reglas simples) |
 | Módulo 2 — Optimizador de alineación | Funcionando (mochila por posición sobre todo el mercado), maximiza puntos esperados dentro del presupuesto para **ambas** fuentes (Biwenger y LaLiga Fantasy, selector `source` en `/lineup`) |
@@ -110,6 +112,15 @@ una), resuelto con programación dinámica en `modules/lineup_optimizer.py`.
 # TODO fase 2b: usar la plantilla real del usuario (login + `get_user_team()`,
 ya implementado en `BiwengerAdapter`) en vez de un presupuesto manual, para
 no sugerir comprar jugadores que ya tiene.
+
+## Biwenger — histórico de precio
+
+El endpoint público de ficha de jugador (`/players/la-liga/{id}`) no incluye
+histórico de precio por defecto, pero si se piden explícitamente los
+`fields=id,prices` sí lo devuelve — 365 días, uno por día. Es una petición
+extra por jugador (no viene en el listado general), con un pequeño margen
+entre peticiones para no saturar la API — igual que el patrón ya usado con
+LaLiga Fantasy (ver más abajo).
 
 ## LaLiga Fantasy — de dónde salen los datos y por qué
 

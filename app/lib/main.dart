@@ -55,7 +55,7 @@ class FantasyAssistantApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Fantasy Assistant',
+      title: 'Master Fantasy',
       theme: fantasyTheme,
       home: const PlayerSearchScreen(),
     );
@@ -123,7 +123,7 @@ class _PlayerSearchScreenState extends State<PlayerSearchScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Fantasy Assistant'),
+        title: const Text('Master Fantasy'),
         actions: [
           PopupMenuButton<String>(
             icon: const Icon(Icons.menu_rounded),
