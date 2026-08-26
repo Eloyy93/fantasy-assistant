@@ -120,7 +120,13 @@ def get_historial(player_id: str, db: Session = Depends(get_db)) -> PlayerHistor
         select(PriceHistory).where(PriceHistory.player_id == player_id).order_by(PriceHistory.fecha)
     ).scalars().all()
     puntos = db.execute(
-        select(PointsHistory).where(PointsHistory.player_id == player_id).order_by(PointsHistory.jornada)
+        select(PointsHistory)
+        # jornada <= 0 son entradas sintéticas de LaLiga Fantasy (media de
+        # últimos 3 partidos, sin desglose real por jornada — ver
+        # LaLigaFantasyAdapter.get_player_points_history) que solo debe
+        # consumir el optimizador, no el historial visible al usuario.
+        .where(PointsHistory.player_id == player_id, PointsHistory.jornada > 0)
+        .order_by(PointsHistory.jornada)
     ).scalars().all()
 
     return PlayerHistorialOut(
