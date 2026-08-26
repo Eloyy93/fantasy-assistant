@@ -171,13 +171,27 @@ class _PlayerSearchScreenState extends State<PlayerSearchScreen> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.search_off_rounded, size: 40, color: kTextTertiary),
+                      Icon(
+                        _source == 'laligafantasy' ? Icons.cloud_off_rounded : Icons.search_off_rounded,
+                        size: 40,
+                        color: kTextTertiary,
+                      ),
                       const SizedBox(height: 12),
                       Text(
-                        'Sin jugadores disponibles en esta fuente ahora mismo.',
+                        _source == 'laligafantasy'
+                            ? 'La API oficial de LaLiga Fantasy está caída ahora mismo.'
+                            : 'Sin jugadores disponibles en esta fuente ahora mismo.',
                         textAlign: TextAlign.center,
                         style: const TextStyle(color: kTextSecondary),
                       ),
+                      if (_source == 'laligafantasy') ...[
+                        const SizedBox(height: 6),
+                        const Text(
+                          'No es un fallo de la app: se sincroniza sola en\ncuanto LaLiga recupere el servicio.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: kTextTertiary, fontSize: 12),
+                        ),
+                      ],
                     ],
                   ),
                 ),
