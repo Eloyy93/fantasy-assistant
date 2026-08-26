@@ -27,8 +27,8 @@ BASE_URL = "https://cf.biwenger.com/api/v2"
 COMPETITION_DATA_URL = f"{BASE_URL}/competitions/la-liga/data"
 LOGIN_URL = f"{BASE_URL}/auth/login"
 
-# Códigos de posición usados por Biwenger.
-POSITION_MAP = {1: "GK", 2: "DF", 3: "MF", 4: "FW"}
+# Códigos de posición usados por Biwenger, traducidos a abreviaturas en castellano.
+POSITION_MAP = {1: "POR", 2: "DEF", 3: "MED", 4: "DEL"}
 
 SOURCE_NAME = "biwenger"
 

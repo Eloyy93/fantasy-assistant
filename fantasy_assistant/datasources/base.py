@@ -15,7 +15,7 @@ class Player:
     source: str
     nombre: str
     equipo: str
-    posicion: str  # GK | DF | MF | FW
+    posicion: str  # POR | DEF | MED | DEL
     precio: int
 
 
