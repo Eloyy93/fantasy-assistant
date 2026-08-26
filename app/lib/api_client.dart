@@ -120,9 +120,9 @@ class FantasyApiClient {
 
   FantasyApiClient({this.baseUrl = kApiBaseUrl});
 
-  Future<List<Player>> searchPlayers(String query) async {
+  Future<List<Player>> searchPlayers(String query, {required String source}) async {
     final uri = Uri.parse('$baseUrl/players').replace(
-      queryParameters: {if (query.isNotEmpty) 'q': query, 'limit': '30'},
+      queryParameters: {if (query.isNotEmpty) 'q': query, 'limit': '30', 'source': source},
     );
     final response = await http.get(uri).timeout(const Duration(seconds: 10));
     if (response.statusCode != 200) {
@@ -141,9 +141,13 @@ class FantasyApiClient {
     return Prediccion.fromJson(jsonDecode(utf8.decode(response.bodyBytes)));
   }
 
-  Future<OptimizedLineup> getLineup({required int presupuesto, String formacion = '4-3-3'}) async {
+  Future<OptimizedLineup> getLineup({
+    required int presupuesto,
+    String formacion = '4-3-3',
+    required String source,
+  }) async {
     final uri = Uri.parse('$baseUrl/lineup').replace(
-      queryParameters: {'presupuesto': '$presupuesto', 'formacion': formacion},
+      queryParameters: {'presupuesto': '$presupuesto', 'formacion': formacion, 'source': source},
     );
     final response = await http.get(uri).timeout(const Duration(seconds: 20));
     if (response.statusCode != 200) {

@@ -72,6 +72,7 @@ class _PlayerSearchScreenState extends State<PlayerSearchScreen> {
   final _controller = TextEditingController();
   Timer? _debounce;
 
+  String _source = 'biwenger';
   List<Player> _players = [];
   bool _loading = false;
   String? _error;
@@ -88,13 +89,18 @@ class _PlayerSearchScreenState extends State<PlayerSearchScreen> {
     _debounce = Timer(const Duration(milliseconds: 400), () => _search(query));
   }
 
+  void _onSourceChanged(String source) {
+    setState(() => _source = source);
+    _search(_controller.text);
+  }
+
   Future<void> _search(String query) async {
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
-      final players = await _api.searchPlayers(query);
+      final players = await _api.searchPlayers(query, source: _source);
       if (!mounted) return;
       setState(() => _players = players);
     } catch (e) {
@@ -121,13 +127,24 @@ class _PlayerSearchScreenState extends State<PlayerSearchScreen> {
             icon: const Icon(Icons.auto_awesome),
             tooltip: 'Optimizador de alineación',
             onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => LineupScreen(api: _api)),
+              MaterialPageRoute(builder: (_) => LineupScreen(api: _api, source: _source)),
             ),
           ),
         ],
       ),
       body: Column(
         children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+            child: SegmentedButton<String>(
+              segments: const [
+                ButtonSegment(value: 'biwenger', label: Text('Biwenger')),
+                ButtonSegment(value: 'laligafantasy', label: Text('LaLiga Fantasy')),
+              ],
+              selected: {_source},
+              onSelectionChanged: (selection) => _onSourceChanged(selection.first),
+            ),
+          ),
           Padding(
             padding: const EdgeInsets.all(16),
             child: TextField(
@@ -334,8 +351,9 @@ const _formaciones = ['4-3-3', '4-4-2', '3-4-3', '3-5-2', '5-3-2', '5-4-1'];
 
 class LineupScreen extends StatefulWidget {
   final FantasyApiClient api;
+  final String source;
 
-  const LineupScreen({super.key, required this.api});
+  const LineupScreen({super.key, required this.api, required this.source});
 
   @override
   State<LineupScreen> createState() => _LineupScreenState();
@@ -367,7 +385,11 @@ class _LineupScreenState extends State<LineupScreen> {
       _resultado = null;
     });
     try {
-      final resultado = await widget.api.getLineup(presupuesto: presupuesto, formacion: _formacion);
+      final resultado = await widget.api.getLineup(
+        presupuesto: presupuesto,
+        formacion: _formacion,
+        source: widget.source,
+      );
       if (!mounted) return;
       setState(() => _resultado = resultado);
     } catch (e) {
@@ -381,7 +403,9 @@ class _LineupScreenState extends State<LineupScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Optimizador de alineación')),
+      appBar: AppBar(
+        title: Text('Optimizador (${widget.source == 'biwenger' ? 'Biwenger' : 'LaLiga Fantasy'})'),
+      ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
