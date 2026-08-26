@@ -150,6 +150,44 @@ class PlayerHistorial {
   }
 }
 
+class TeamPlayer {
+  final String id;
+  final String source;
+  final String nombre;
+  final String equipo;
+  final String posicion;
+  final int precio;
+  final int? variacionPrecio;
+  final int? puntosUltimaJornada;
+  final int puntosTemporada;
+
+  TeamPlayer({
+    required this.id,
+    required this.source,
+    required this.nombre,
+    required this.equipo,
+    required this.posicion,
+    required this.precio,
+    required this.variacionPrecio,
+    required this.puntosUltimaJornada,
+    required this.puntosTemporada,
+  });
+
+  factory TeamPlayer.fromJson(Map<String, dynamic> json) {
+    return TeamPlayer(
+      id: json['id'] as String,
+      source: json['source'] as String,
+      nombre: json['nombre'] as String,
+      equipo: json['equipo'] as String,
+      posicion: json['posicion'] as String,
+      precio: json['precio'] as int,
+      variacionPrecio: json['variacion_precio'] as int?,
+      puntosUltimaJornada: json['puntos_ultima_jornada'] as int?,
+      puntosTemporada: json['puntos_temporada'] as int,
+    );
+  }
+}
+
 class ApiException implements Exception {
   final String message;
   ApiException(this.message);
@@ -256,5 +294,15 @@ class FantasyApiClient {
     }
     final List<dynamic> data = jsonDecode(utf8.decode(response.bodyBytes));
     return data.cast<String>();
+  }
+
+  Future<List<TeamPlayer>> getTeam(String fcmToken) async {
+    final uri = Uri.parse('$baseUrl/team').replace(queryParameters: {'fcm_token': fcmToken});
+    final response = await http.get(uri).timeout(const Duration(seconds: 15));
+    if (response.statusCode != 200) {
+      throw ApiException('Error ${response.statusCode} al leer la plantilla');
+    }
+    final List<dynamic> data = jsonDecode(utf8.decode(response.bodyBytes));
+    return data.map((e) => TeamPlayer.fromJson(e as Map<String, dynamic>)).toList();
   }
 }

@@ -54,7 +54,8 @@ uvicorn fantasy_assistant.api.main:app --reload
 | Módulo 1 — Predictor de precio | Funcionando (reglas simples) |
 | Módulo 2 — Optimizador de alineación | Funcionando (mochila por posición sobre todo el mercado), maximiza puntos esperados dentro del presupuesto para **ambas** fuentes (Biwenger y LaLiga Fantasy, selector `source` en `/lineup`) |
 | Módulo 3 — Alertas | Funcionando: push por jugador, solo a los dispositivos suscritos a ese jugador concreto |
-| API REST (`fantasy_assistant/api`) | Funcionando: `/players`, `/players/{id}/prediccion`, `/lineup`, `/devices`, `/subscriptions` |
+| Mi plantilla | Funcionando: reutiliza las suscripciones del módulo 3 (seguir a un jugador = está en tu plantilla) y añade variación de precio + puntos por jornada/temporada en `/team` |
+| API REST (`fantasy_assistant/api`) | Funcionando: `/players` (búsqueda insensible a acentos), `/players/{id}/prediccion`, `/players/{id}/historial`, `/lineup`, `/devices`, `/subscriptions`, `/team` |
 | App Android (Flutter, `app/`) | Funcionando, apuntando al backend en producción — única interfaz de usuario, con selector de fuente (Biwenger/LaLiga Fantasy) |
 | Despliegue backend | **En producción en Railway**, sincronizando Biwenger y LaLiga Fantasy en paralelo cada 3h (cada una independiente: si una falla no afecta a la otra) |
 | Notificaciones push (FCM) | Funcionando, verificado extremo a extremo |

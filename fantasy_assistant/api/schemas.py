@@ -59,3 +59,16 @@ class PointsEntryOut(BaseModel):
 class PlayerHistorialOut(BaseModel):
     precios: list[PricePointOut]
     puntos: list[PointsEntryOut]
+
+
+class TeamPlayerOut(BaseModel):
+    id: str
+    source: str
+    nombre: str
+    equipo: str
+    posicion: str
+    precio: int
+    # None si aún no hay suficiente histórico para calcular la variación.
+    variacion_precio: int | None = None
+    puntos_ultima_jornada: int | None = None
+    puntos_temporada: int

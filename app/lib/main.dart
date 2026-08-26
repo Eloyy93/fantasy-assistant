@@ -125,6 +125,13 @@ class _PlayerSearchScreenState extends State<PlayerSearchScreen> {
         title: const Text('Fantasy Assistant'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.shield_rounded),
+            tooltip: 'Mi plantilla',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => TeamScreen(api: _api)),
+            ),
+          ),
+          IconButton(
             icon: const Icon(Icons.auto_awesome_rounded),
             tooltip: 'Optimizador de alineación',
             onPressed: () => Navigator.of(context).push(
@@ -215,6 +222,190 @@ class _PlayerSearchScreenState extends State<PlayerSearchScreen> {
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+class TeamScreen extends StatefulWidget {
+  final FantasyApiClient api;
+
+  const TeamScreen({super.key, required this.api});
+
+  @override
+  State<TeamScreen> createState() => _TeamScreenState();
+}
+
+class _TeamScreenState extends State<TeamScreen> {
+  List<TeamPlayer>? _jugadores;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _cargar();
+  }
+
+  Future<void> _cargar() async {
+    setState(() => _error = null);
+    final token = currentFcmToken;
+    if (token == null) {
+      setState(() => _error = 'Notificaciones no disponibles todavía en este dispositivo.');
+      return;
+    }
+    try {
+      final jugadores = await widget.api.getTeam(token);
+      if (!mounted) return;
+      setState(() => _jugadores = jugadores);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = 'No se pudo cargar la plantilla: $e');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Mi plantilla')),
+      body: RefreshIndicator(
+        onRefresh: _cargar,
+        child: _buildBody(context),
+      ),
+    );
+  }
+
+  Widget _buildBody(BuildContext context) {
+    if (_error != null) {
+      return ListView(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(24),
+            child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+          ),
+        ],
+      );
+    }
+    if (_jugadores == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_jugadores!.isEmpty) {
+      return ListView(
+        children: const [
+          Padding(
+            padding: EdgeInsets.all(32),
+            child: Center(
+              child: Text(
+                'Todavía no has añadido jugadores a tu plantilla.\n'
+                'Búscalos y pulsa el botón de alertas en su ficha para empezar a seguirlos.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: kTextSecondary),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+    return ListView.separated(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+      itemCount: _jugadores!.length,
+      separatorBuilder: (_, _) => const SizedBox(height: 10),
+      itemBuilder: (context, index) => _TeamPlayerCard(
+        jugador: _jugadores![index],
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => PrediccionScreen(
+              player: Player(
+                id: _jugadores![index].id,
+                source: _jugadores![index].source,
+                nombre: _jugadores![index].nombre,
+                equipo: _jugadores![index].equipo,
+                posicion: _jugadores![index].posicion,
+                precio: _jugadores![index].precio,
+              ),
+              api: widget.api,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TeamPlayerCard extends StatelessWidget {
+  final TeamPlayer jugador;
+  final VoidCallback onTap;
+
+  const _TeamPlayerCard({required this.jugador, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final variacion = jugador.variacionPrecio;
+    final subiendo = variacion != null && variacion > 0;
+    final bajando = variacion != null && variacion < 0;
+    final colorVariacion = subiendo ? kMintAccent : (bajando ? const Color(0xFFE85C4A) : kTextTertiary);
+    final iconoVariacion = subiendo
+        ? Icons.arrow_upward_rounded
+        : (bajando ? Icons.arrow_downward_rounded : Icons.remove_rounded);
+
+    return Material(
+      color: kSurfaceColor,
+      borderRadius: BorderRadius.circular(18),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: kBorderColor),
+          ),
+          child: Row(
+            children: [
+              PositionBadge(posicion: jugador.posicion),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(jugador.nombre, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 2),
+                    Text(jugador.equipo, style: const TextStyle(fontSize: 13, color: kTextSecondary)),
+                  ],
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    '${(jugador.precio / 1000000).toStringAsFixed(2)} M€',
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 3),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(iconoVariacion, size: 13, color: colorVariacion),
+                      if (variacion != null)
+                        Text(
+                          '${(variacion.abs() / 1000).toStringAsFixed(0)} k€',
+                          style: TextStyle(fontSize: 11, color: colorVariacion, fontWeight: FontWeight.w600),
+                        ),
+                      const SizedBox(width: 8),
+                      Icon(Icons.sports_soccer_rounded, size: 12, color: kTextTertiary),
+                      const SizedBox(width: 2),
+                      Text(
+                        jugador.puntosUltimaJornada != null
+                            ? '${jugador.puntosUltimaJornada} · ${jugador.puntosTemporada} pts'
+                            : '${jugador.puntosTemporada} pts',
+                        style: const TextStyle(fontSize: 11, color: kTextTertiary, fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

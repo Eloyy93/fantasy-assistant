@@ -6,10 +6,11 @@ Uso local:
 from __future__ import annotations
 
 import datetime as dt
+import unicodedata
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from fastapi import Depends, FastAPI, HTTPException, Query
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from fantasy_assistant.api.schemas import (
@@ -19,6 +20,7 @@ from fantasy_assistant.api.schemas import (
     PlayerOut,
     PrediccionOut,
     SubscriptionIn,
+    TeamPlayerOut,
 )
 from fantasy_assistant.config import config
 from fantasy_assistant.datasources import SOURCES, get_data_source
@@ -87,18 +89,31 @@ def health(db: Session = Depends(get_db)) -> dict:
     return {"status": "ok", "jugadores_por_fuente": jugadores_por_fuente}
 
 
+def _normalizar_busqueda(texto: str) -> str:
+    """minúsculas y sin acentos, para que 'alvaro' encuentre 'Álvaro'."""
+    sin_acentos = unicodedata.normalize("NFKD", texto).encode("ascii", "ignore").decode("ascii")
+    return sin_acentos.lower()
+
+
 @app.get("/players", response_model=list[PlayerOut])
 def list_players(
-    q: str | None = Query(default=None, description="Filtro por nombre (contiene, insensible a mayúsculas)"),
+    q: str | None = Query(default=None, description="Filtro por nombre (contiene, insensible a mayúsculas y acentos)"),
     source: str = Query(default=config.fantasy_source),
     limit: int = Query(default=50, le=200),
     db: Session = Depends(get_db),
 ) -> list[PlayerRecord]:
     stmt = select(PlayerRecord).where(PlayerRecord.source == source)
-    if q:
-        stmt = stmt.where(PlayerRecord.nombre.ilike(f"%{q}%"))
-    stmt = stmt.limit(limit)
-    return db.execute(stmt).scalars().all()
+    if not q:
+        return db.execute(stmt.limit(limit)).scalars().all()
+
+    # SQLite no tiene una forma nativa de ignorar acentos en LIKE, así que
+    # filtramos en Python sobre el nombre normalizado (sin acentos). El
+    # mercado de una fuente son unos cientos de jugadores, así que traer
+    # todos y filtrar en memoria es barato.
+    q_normalizada = _normalizar_busqueda(q)
+    candidatos = db.execute(stmt).scalars().all()
+    coincidencias = [p for p in candidatos if q_normalizada in _normalizar_busqueda(p.nombre)]
+    return coincidencias[:limit]
 
 
 @app.get("/players/{player_id}/prediccion", response_model=PrediccionOut)
@@ -179,6 +194,62 @@ def list_subscriptions(fcm_token: str = Query(...), db: Session = Depends(get_db
             select(DeviceSubscription.player_id).where(DeviceSubscription.fcm_token == fcm_token)
         ).scalars().all()
     )
+
+
+@app.get("/team", response_model=list[TeamPlayerOut])
+def get_team(fcm_token: str = Query(...), db: Session = Depends(get_db)) -> list[TeamPlayerOut]:
+    """Plantilla del usuario: los jugadores a los que sigue (suscrito a
+    alertas) con su variación de precio reciente y sus puntos. Reutiliza
+    las suscripciones ya existentes (módulo 3) en vez de una tabla nueva:
+    seguir a un jugador ya implica "está en mi radar/plantilla"."""
+    player_ids = db.execute(
+        select(DeviceSubscription.player_id).where(DeviceSubscription.fcm_token == fcm_token)
+    ).scalars().all()
+    if not player_ids:
+        return []
+
+    resultado: list[TeamPlayerOut] = []
+    for player_id in player_ids:
+        player = db.get(PlayerRecord, player_id)
+        if not player:
+            continue
+
+        precios = db.execute(
+            select(PriceHistory.precio)
+            .where(PriceHistory.player_id == player_id)
+            .order_by(PriceHistory.fecha.desc())
+            .limit(2)
+        ).scalars().all()
+        variacion = precios[0] - precios[1] if len(precios) == 2 else None
+
+        puntos_ultima = db.execute(
+            select(PointsHistory.puntos)
+            .where(PointsHistory.player_id == player_id, PointsHistory.jornada > 0)
+            .order_by(PointsHistory.jornada.desc())
+            .limit(1)
+        ).scalar_one_or_none()
+
+        puntos_temporada = db.execute(
+            select(func.coalesce(func.sum(PointsHistory.puntos), 0)).where(
+                PointsHistory.player_id == player_id, PointsHistory.jornada > 0
+            )
+        ).scalar_one()
+
+        resultado.append(
+            TeamPlayerOut(
+                id=player.id,
+                source=player.source,
+                nombre=player.nombre,
+                equipo=player.equipo,
+                posicion=player.posicion,
+                precio=player.precio,
+                variacion_precio=variacion,
+                puntos_ultima_jornada=puntos_ultima,
+                puntos_temporada=puntos_temporada,
+            )
+        )
+
+    return resultado
 
 
 @app.get("/lineup", response_model=OptimizedLineupOut)

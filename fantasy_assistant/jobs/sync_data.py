@@ -74,6 +74,14 @@ def sync_once(source: FantasyDataSource | None = None) -> int:
             for entry in source.get_player_points_history(p.id):
                 _upsert_points(session, record_id, p.source, entry.jornada, entry.puntos)
 
+            # Commit por jugador en vez de uno solo al final: con fuentes
+            # lentas (ej. LaLiga Fantasy, ~6 min por el scraping jornada a
+            # jornada) una única transacción larga bloquearía cualquier otra
+            # escritura (registro de dispositivo, suscripción...) durante
+            # todo ese tiempo — visto en producción como "database is
+            # locked". Aquí el lock dura lo que tarda un solo jugador.
+            session.commit()
+
         if disparadas:
             _send_alerts(session, disparadas)
 
