@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from fantasy_assistant.api.schemas import DeviceRegisterIn, OptimizedLineupOut, PlayerOut, PrediccionOut, SubscriptionIn
 from fantasy_assistant.config import config
+from fantasy_assistant.datasources import SOURCES, get_data_source
 from fantasy_assistant.db.database import SessionLocal, init_db
 from fantasy_assistant.db.models import DeviceRegistration, DeviceSubscription, PlayerRecord
 from fantasy_assistant.jobs.sync_data import sync_once
@@ -28,10 +29,26 @@ app = FastAPI(title="Fantasy Assistant API", version="0.1.0")
 _scheduler = BackgroundScheduler(timezone="UTC")
 
 
+def _sync_source(source_name: str) -> None:
+    sync_once(get_data_source(source_name))
+
+
 @app.on_event("startup")
 def _startup() -> None:
     init_db()
-    _scheduler.add_job(sync_once, "interval", hours=3, next_run_time=dt.datetime.now(dt.timezone.utc))
+    # Las dos fuentes se sincronizan por separado — si una falla (ej. LaLiga
+    # Fantasy caída), no bloquea a la otra. Arrancan escalonadas para no
+    # golpear las dos APIs externas a la vez.
+    now = dt.datetime.now(dt.timezone.utc)
+    for i, source_name in enumerate(SOURCES):
+        _scheduler.add_job(
+            _sync_source,
+            "interval",
+            hours=3,
+            args=[source_name],
+            id=f"sync_{source_name}",
+            next_run_time=now + dt.timedelta(seconds=i * 15),
+        )
     _scheduler.start()
 
 
@@ -53,8 +70,14 @@ def get_db() -> Session:
 
 
 @app.get("/health")
-def health() -> dict:
-    return {"status": "ok", "fuente_activa": config.fantasy_source}
+def health(db: Session = Depends(get_db)) -> dict:
+    jugadores_por_fuente = {
+        source_name: len(db.execute(
+            select(PlayerRecord.id).where(PlayerRecord.source == source_name)
+        ).scalars().all())
+        for source_name in SOURCES
+    }
+    return {"status": "ok", "jugadores_por_fuente": jugadores_por_fuente}
 
 
 @app.get("/players", response_model=list[PlayerOut])
@@ -130,9 +153,10 @@ def list_subscriptions(fcm_token: str = Query(...), db: Session = Depends(get_db
 def get_lineup(
     presupuesto: int = Query(..., gt=0, description="Presupuesto disponible en euros"),
     formacion: str = Query(default="4-3-3", description=f"Una de: {', '.join(FORMACIONES)}"),
+    source: str = Query(default=config.fantasy_source),
 ) -> OptimizedLineupOut:
     try:
-        result = optimize_lineup(presupuesto=presupuesto, formacion=formacion)
+        result = optimize_lineup(presupuesto=presupuesto, formacion=formacion, source=source)
     except LineupError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return OptimizedLineupOut(
