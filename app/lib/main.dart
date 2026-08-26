@@ -239,6 +239,30 @@ class _PrediccionScreenState extends State<PrediccionScreen> {
     }
   }
 
+  Widget _buildBotonAlertas(BuildContext context) {
+    if (_suscrito == null) {
+      return const SizedBox(height: 40, width: 40, child: CircularProgressIndicator(strokeWidth: 2));
+    }
+
+    final activada = _suscrito!;
+    final icono = _cambiandoSuscripcion
+        ? const SizedBox(
+            height: 18,
+            width: 18,
+            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+          )
+        : Icon(activada ? Icons.notifications_active : Icons.notifications_off_outlined);
+    final etiqueta = Text(activada ? 'Alertas de precio activadas' : 'Activar alertas de precio');
+    final onPressed = (_cambiandoSuscripcion || currentFcmToken == null) ? null : _toggleSuscripcion;
+
+    return SizedBox(
+      width: double.infinity,
+      child: activada
+          ? FilledButton.icon(onPressed: onPressed, icon: icono, label: etiqueta)
+          : OutlinedButton.icon(onPressed: onPressed, icon: icono, label: etiqueta),
+    );
+  }
+
   IconData _iconFor(String prediccion) {
     switch (prediccion) {
       case 'sube':
@@ -264,22 +288,7 @@ class _PrediccionScreenState extends State<PrediccionScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.player.nombre),
-        actions: [
-          if (_cambiandoSuscripcion)
-            const Padding(
-              padding: EdgeInsets.all(16),
-              child: SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2)),
-            )
-          else if (_suscrito != null)
-            IconButton(
-              icon: Icon(_suscrito! ? Icons.notifications_active : Icons.notifications_none),
-              tooltip: _suscrito! ? 'Quitar alerta de precio' : 'Avisarme de cambios de precio',
-              onPressed: currentFcmToken == null ? null : _toggleSuscripcion,
-            ),
-        ],
-      ),
+      appBar: AppBar(title: Text(widget.player.nombre)),
       body: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
@@ -289,7 +298,9 @@ class _PrediccionScreenState extends State<PrediccionScreen> {
                 style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
             Text('Precio: ${(widget.player.precio / 1000000).toStringAsFixed(2)} M€'),
-            const SizedBox(height: 32),
+            const SizedBox(height: 20),
+            _buildBotonAlertas(context),
+            const SizedBox(height: 24),
             if (_error != null) Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
             if (_prediccion == null && _error == null) const Center(child: CircularProgressIndicator()),
             if (_prediccion != null)
