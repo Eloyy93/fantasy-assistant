@@ -53,6 +53,60 @@ class Prediccion {
   }
 }
 
+class LineupPlayer {
+  final String playerId;
+  final String nombre;
+  final String equipo;
+  final String posicion;
+  final int precio;
+  final double puntosEsperados;
+
+  LineupPlayer({
+    required this.playerId,
+    required this.nombre,
+    required this.equipo,
+    required this.posicion,
+    required this.precio,
+    required this.puntosEsperados,
+  });
+
+  factory LineupPlayer.fromJson(Map<String, dynamic> json) {
+    return LineupPlayer(
+      playerId: json['player_id'] as String,
+      nombre: json['nombre'] as String,
+      equipo: json['equipo'] as String,
+      posicion: json['posicion'] as String,
+      precio: json['precio'] as int,
+      puntosEsperados: (json['puntos_esperados'] as num).toDouble(),
+    );
+  }
+}
+
+class OptimizedLineup {
+  final String formacion;
+  final List<LineupPlayer> jugadores;
+  final double puntosEsperados;
+  final int presupuestoUsado;
+
+  OptimizedLineup({
+    required this.formacion,
+    required this.jugadores,
+    required this.puntosEsperados,
+    required this.presupuestoUsado,
+  });
+
+  factory OptimizedLineup.fromJson(Map<String, dynamic> json) {
+    return OptimizedLineup(
+      formacion: json['formacion'] as String,
+      jugadores: (json['jugadores'] as List<dynamic>)
+          .map((e) => LineupPlayer.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      puntosEsperados: (json['puntos_esperados'] as num).toDouble(),
+      presupuestoUsado: json['presupuesto_usado'] as int,
+    );
+  }
+}
+
 class ApiException implements Exception {
   final String message;
   ApiException(this.message);
@@ -85,6 +139,18 @@ class FantasyApiClient {
       throw ApiException('Error ${response.statusCode} al obtener la predicción');
     }
     return Prediccion.fromJson(jsonDecode(utf8.decode(response.bodyBytes)));
+  }
+
+  Future<OptimizedLineup> getLineup({required int presupuesto, String formacion = '4-3-3'}) async {
+    final uri = Uri.parse('$baseUrl/lineup').replace(
+      queryParameters: {'presupuesto': '$presupuesto', 'formacion': formacion},
+    );
+    final response = await http.get(uri).timeout(const Duration(seconds: 20));
+    if (response.statusCode != 200) {
+      final body = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+      throw ApiException(body['detail']?.toString() ?? 'Error ${response.statusCode} al calcular la alineación');
+    }
+    return OptimizedLineup.fromJson(jsonDecode(utf8.decode(response.bodyBytes)));
   }
 
   Future<void> registerDevice(String fcmToken) async {

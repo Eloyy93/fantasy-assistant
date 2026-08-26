@@ -108,7 +108,18 @@ class _PlayerSearchScreenState extends State<PlayerSearchScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Fantasy Assistant')),
+      appBar: AppBar(
+        title: const Text('Fantasy Assistant'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.auto_awesome),
+            tooltip: 'Optimizador de alineación',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => LineupScreen(api: _api)),
+            ),
+          ),
+        ],
+      ),
       body: Column(
         children: [
           Padding(
@@ -242,6 +253,120 @@ class _PrediccionScreenState extends State<PrediccionScreen> {
               ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+const _formaciones = ['4-3-3', '4-4-2', '3-4-3', '3-5-2', '5-3-2', '5-4-1'];
+
+class LineupScreen extends StatefulWidget {
+  final FantasyApiClient api;
+
+  const LineupScreen({super.key, required this.api});
+
+  @override
+  State<LineupScreen> createState() => _LineupScreenState();
+}
+
+class _LineupScreenState extends State<LineupScreen> {
+  final _presupuestoController = TextEditingController(text: '60000000');
+  String _formacion = '4-3-3';
+  OptimizedLineup? _resultado;
+  bool _loading = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _presupuestoController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _calcular() async {
+    final presupuesto = int.tryParse(_presupuestoController.text.trim());
+    if (presupuesto == null || presupuesto <= 0) {
+      setState(() => _error = 'Introduce un presupuesto válido en euros');
+      return;
+    }
+
+    setState(() {
+      _loading = true;
+      _error = null;
+      _resultado = null;
+    });
+    try {
+      final resultado = await widget.api.getLineup(presupuesto: presupuesto, formacion: _formacion);
+      if (!mounted) return;
+      setState(() => _resultado = resultado);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = '$e');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Optimizador de alineación')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          TextField(
+            controller: _presupuestoController,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(
+              labelText: 'Presupuesto (€)',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 16),
+          DropdownButtonFormField<String>(
+            initialValue: _formacion,
+            decoration: const InputDecoration(labelText: 'Formación', border: OutlineInputBorder()),
+            items: _formaciones.map((f) => DropdownMenuItem(value: f, child: Text(f))).toList(),
+            onChanged: (value) => setState(() => _formacion = value ?? _formacion),
+          ),
+          const SizedBox(height: 16),
+          FilledButton(
+            onPressed: _loading ? null : _calcular,
+            child: _loading
+                ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                : const Text('Calcular alineación óptima'),
+          ),
+          if (_error != null) ...[
+            const SizedBox(height: 16),
+            Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+          ],
+          if (_resultado != null) ...[
+            const SizedBox(height: 24),
+            Card(
+              color: Theme.of(context).colorScheme.primaryContainer,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('${_resultado!.formacion} — ${_resultado!.puntosEsperados.toStringAsFixed(1)} pts esperados',
+                        style: Theme.of(context).textTheme.titleMedium),
+                    const SizedBox(height: 4),
+                    Text('Presupuesto usado: ${(_resultado!.presupuestoUsado / 1000000).toStringAsFixed(2)} M€'),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            ..._resultado!.jugadores.map(
+              (j) => ListTile(
+                leading: CircleAvatar(child: Text(j.posicion)),
+                title: Text(j.nombre),
+                subtitle: Text('${j.equipo} · ${j.puntosEsperados.toStringAsFixed(1)} pts esperados'),
+                trailing: Text('${(j.precio / 1000000).toStringAsFixed(2)} M€'),
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
