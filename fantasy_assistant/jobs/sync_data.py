@@ -17,9 +17,9 @@ from fantasy_assistant.config import config
 from fantasy_assistant.datasources import get_data_source
 from fantasy_assistant.datasources.base import FantasyDataSource, Player
 from fantasy_assistant.db.database import get_session, init_db
-from fantasy_assistant.db.models import DeviceRegistration, PlayerRecord, PointsHistory, PriceHistory, TelegramSubscription
+from fantasy_assistant.db.models import DeviceRegistration, DeviceSubscription, PlayerRecord, PointsHistory, PriceHistory
 from fantasy_assistant.modules import alerts
-from fantasy_assistant.notifications import fcm, telegram_notify
+from fantasy_assistant.notifications import fcm
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -76,26 +76,26 @@ def sync_once(source: FantasyDataSource | None = None) -> int:
 
 
 def _send_alerts(session, alertas_disparadas: list[alerts.Alert]) -> None:
-    # Push (FCM): a todos los dispositivos registrados, sin filtrar por
-    # jugador — la app aún no tiene una UI para suscribirse a jugadores
-    # concretos, así que de momento todo dispositivo recibe todas las alertas.
-    tokens = session.execute(select(DeviceRegistration.fcm_token)).scalars().all()
-    if tokens:
-        invalid_tokens = fcm.send_alerts(alertas_disparadas, list(tokens))
-        if invalid_tokens:
-            session.execute(
-                DeviceRegistration.__table__.delete().where(DeviceRegistration.fcm_token.in_(invalid_tokens))
-            )
-        logger.info("Enviadas %d alertas a %d dispositivos", len(alertas_disparadas), len(tokens))
-
-    # Telegram: solo a los chats suscritos a cada jugador concreto (/alertas on <jugador>)
+    # Push (FCM) únicamente a los dispositivos suscritos a ese jugador
+    # concreto (gestionado desde la app, ver POST/DELETE /subscriptions).
+    invalid_tokens: set[str] = set()
+    enviadas = 0
     for alert in alertas_disparadas:
-        chat_ids = session.execute(
-            select(TelegramSubscription.chat_id).where(TelegramSubscription.player_id == alert.player_id)
+        tokens = session.execute(
+            select(DeviceSubscription.fcm_token).where(DeviceSubscription.player_id == alert.player_id)
         ).scalars().all()
-        if chat_ids:
-            telegram_notify.send_telegram_alert(alert, list(chat_ids))
-            logger.info("Alerta de %s enviada a %d chats de Telegram suscritos", alert.player_id, len(chat_ids))
+        if not tokens:
+            continue
+        invalid_tokens.update(fcm.send_alerts([alert], list(tokens)))
+        enviadas += 1
+        logger.info("Alerta de %s enviada a %d dispositivos suscritos", alert.player_id, len(tokens))
+
+    if invalid_tokens:
+        session.execute(DeviceRegistration.__table__.delete().where(DeviceRegistration.fcm_token.in_(invalid_tokens)))
+        session.execute(DeviceSubscription.__table__.delete().where(DeviceSubscription.fcm_token.in_(invalid_tokens)))
+
+    if enviadas:
+        logger.info("%d/%d alertas tenían al menos un dispositivo suscrito", enviadas, len(alertas_disparadas))
 
 
 def _upsert_price_snapshot(session, player_id: str, source: str, fecha: dt.date, precio: int) -> None:

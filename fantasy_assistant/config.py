@@ -7,8 +7,8 @@ from dataclasses import dataclass, field
 from dotenv import load_dotenv
 
 # override=True: el .env de este proyecto manda incluso si ya existe una
-# variable de entorno del mismo nombre en el sistema (ej. TELEGRAM_BOT_TOKEN
-# de otro proyecto en la misma máquina) — si no, se cuela silenciosamente.
+# variable de entorno del mismo nombre en el sistema (ej. otro proyecto en
+# la misma máquina) — si no, se cuela silenciosamente.
 load_dotenv(override=True)
 
 
@@ -21,8 +21,6 @@ def _float_env(name: str, default: float) -> float:
 class Config:
     fantasy_source: str = field(default_factory=lambda: os.getenv("FANTASY_SOURCE", "biwenger").lower())
     database_url: str = field(default_factory=lambda: os.getenv("DATABASE_URL", "sqlite:///fantasy_assistant.db"))
-
-    telegram_bot_token: str = field(default_factory=lambda: os.getenv("TELEGRAM_BOT_TOKEN", ""))
 
     biwenger_email: str = field(default_factory=lambda: os.getenv("BIWENGER_EMAIL", ""))
     biwenger_password: str = field(default_factory=lambda: os.getenv("BIWENGER_PASSWORD", ""))

@@ -25,6 +25,11 @@ class DeviceRegisterIn(BaseModel):
     user_id: str | None = None
 
 
+class SubscriptionIn(BaseModel):
+    fcm_token: str
+    player_id: str
+
+
 class LineupPlayerOut(BaseModel):
     player_id: str
     nombre: str

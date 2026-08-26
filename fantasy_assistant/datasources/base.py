@@ -1,7 +1,7 @@
 """Contrato común que deben cumplir todos los adaptadores de fuente de datos.
 
-El resto de la app (BD, módulos de análisis, bot de Telegram) solo debe hablar
-con `FantasyDataSource`, nunca con un adaptador concreto.
+El resto de la app (BD, módulos de análisis, API) solo debe hablar con
+`FantasyDataSource`, nunca con un adaptador concreto.
 """
 from __future__ import annotations
 

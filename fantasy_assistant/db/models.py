@@ -68,14 +68,14 @@ class DeviceRegistration(Base):
     user_id: Mapped[str] = mapped_column(String, index=True, nullable=True)
 
 
-class TelegramSubscription(Base):
-    """Suscripción de un chat de Telegram a las alertas de un jugador
-    concreto (`/alertas on|off <jugador>`)."""
+class DeviceSubscription(Base):
+    """Suscripción de un dispositivo (identificado por su token FCM) a las
+    alertas de precio de un jugador concreto, gestionada desde la app."""
 
-    __tablename__ = "telegram_subscriptions"
+    __tablename__ = "device_subscriptions"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    chat_id: Mapped[str] = mapped_column(String, index=True)
+    fcm_token: Mapped[str] = mapped_column(String, index=True)
     player_id: Mapped[str] = mapped_column(ForeignKey("players.id"), index=True)
 
-    __table_args__ = (UniqueConstraint("chat_id", "player_id", name="uq_subscription_chat_player"),)
+    __table_args__ = (UniqueConstraint("fcm_token", "player_id", name="uq_subscription_device_player"),)

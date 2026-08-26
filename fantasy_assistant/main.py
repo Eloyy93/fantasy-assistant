@@ -1,15 +1,11 @@
-"""Punto de entrada: inicializa la BD, sincroniza datos y arranca el bot."""
+"""Punto de entrada local: arranca la API REST (única interfaz de la app)."""
 from __future__ import annotations
 
-from fantasy_assistant.bot.telegram_bot import main as run_bot
-from fantasy_assistant.db.database import init_db
-from fantasy_assistant.jobs.sync_data import sync_once
+import uvicorn
 
 
 def main() -> None:
-    init_db()
-    sync_once()
-    run_bot()
+    uvicorn.run("fantasy_assistant.api.main:app", host="0.0.0.0", port=8000)
 
 
 if __name__ == "__main__":
