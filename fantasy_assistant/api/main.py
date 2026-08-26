@@ -232,6 +232,16 @@ def remove_from_team(payload: TeamMemberIn, db: Session = Depends(get_db)) -> No
     db.commit()
 
 
+@app.get("/team/contains")
+def team_contains(device_id: str = Query(...), player_id: str = Query(...), db: Session = Depends(get_db)) -> dict:
+    """Consulta ligera para el botón "añadir a mi plantilla" de la ficha de
+    un jugador, sin traer toda la plantilla solo para comprobar uno."""
+    existente = db.execute(
+        select(TeamPlayer).where(TeamPlayer.device_id == device_id, TeamPlayer.player_id == player_id)
+    ).scalar_one_or_none()
+    return {"en_plantilla": existente is not None}
+
+
 @app.get("/team", response_model=list[TeamPlayerOut])
 def get_team(
     device_id: str = Query(...),

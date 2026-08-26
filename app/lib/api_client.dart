@@ -316,10 +316,27 @@ class FantasyApiClient {
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode({'device_id': deviceId, 'player_id': playerId}),
         )
-        .timeout(const Duration(seconds: 10));
+        .timeout(const Duration(seconds: 20));
     if (response.statusCode >= 300) {
-      throw ApiException('Error ${response.statusCode} al añadir a la plantilla');
+      String detalle = 'Error ${response.statusCode}';
+      try {
+        final body = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        if (body['detail'] != null) detalle = body['detail'].toString();
+      } catch (_) {}
+      throw ApiException(detalle);
     }
+  }
+
+  Future<bool> isInTeam({required String deviceId, required String playerId}) async {
+    final uri = Uri.parse('$baseUrl/team/contains').replace(
+      queryParameters: {'device_id': deviceId, 'player_id': playerId},
+    );
+    final response = await http.get(uri).timeout(const Duration(seconds: 10));
+    if (response.statusCode != 200) {
+      throw ApiException('Error ${response.statusCode} al comprobar la plantilla');
+    }
+    final body = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+    return body['en_plantilla'] as bool;
   }
 
   Future<void> removeFromTeam({required String deviceId, required String playerId}) async {
@@ -330,7 +347,7 @@ class FantasyApiClient {
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode({'device_id': deviceId, 'player_id': playerId}),
         )
-        .timeout(const Duration(seconds: 10));
+        .timeout(const Duration(seconds: 20));
     if (response.statusCode >= 300) {
       throw ApiException('Error ${response.statusCode} al quitar de la plantilla');
     }

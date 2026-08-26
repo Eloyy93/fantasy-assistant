@@ -692,12 +692,73 @@ class _PrediccionScreenState extends State<PrediccionScreen> {
   PlayerHistorial? _historial;
   String? _errorHistorial;
 
+  String? _deviceId;
+  bool? _enPlantilla; // null mientras se comprueba el estado inicial
+  bool _cambiandoPlantilla = false;
+
   @override
   void initState() {
     super.initState();
     _load();
     _cargarEstadoSuscripcion();
     _cargarHistorial();
+    _cargarEstadoPlantilla();
+  }
+
+  Future<void> _cargarEstadoPlantilla() async {
+    try {
+      final id = await getDeviceId();
+      if (!mounted) return;
+      _deviceId = id;
+      final enPlantilla = await widget.api.isInTeam(deviceId: id, playerId: widget.player.id);
+      if (!mounted) return;
+      setState(() => _enPlantilla = enPlantilla);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _enPlantilla = false);
+    }
+  }
+
+  Future<void> _togglePlantilla() async {
+    final deviceId = _deviceId;
+    if (deviceId == null || _enPlantilla == null) return;
+
+    setState(() => _cambiandoPlantilla = true);
+    try {
+      if (_enPlantilla!) {
+        await widget.api.removeFromTeam(deviceId: deviceId, playerId: widget.player.id);
+      } else {
+        await widget.api.addToTeam(deviceId: deviceId, playerId: widget.player.id);
+      }
+      if (!mounted) return;
+      setState(() => _enPlantilla = !_enPlantilla!);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('No se pudo actualizar la plantilla: $e')));
+    } finally {
+      if (mounted) setState(() => _cambiandoPlantilla = false);
+    }
+  }
+
+  Widget _buildBotonPlantilla(BuildContext context) {
+    if (_enPlantilla == null) {
+      return const SizedBox(
+        height: 52,
+        child: Center(child: SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))),
+      );
+    }
+
+    final enPlantilla = _enPlantilla!;
+    final icono = _cambiandoPlantilla
+        ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
+        : Icon(enPlantilla ? Icons.shield_rounded : Icons.add_rounded);
+    final etiqueta = Text(enPlantilla ? 'En tu plantilla' : 'Añadir a mi plantilla');
+    final onPressed = (_cambiandoPlantilla || _deviceId == null) ? null : _togglePlantilla;
+
+    return SizedBox(
+      width: double.infinity,
+      child: OutlinedButton.icon(onPressed: onPressed, icon: icono, label: etiqueta),
+    );
   }
 
   Future<void> _load() async {
@@ -842,6 +903,8 @@ class _PrediccionScreenState extends State<PrediccionScreen> {
               ),
             ),
             const SizedBox(height: 14),
+            _buildBotonPlantilla(context),
+            const SizedBox(height: 10),
             _buildBotonAlertas(context),
             const SizedBox(height: 28),
             if (_error != null) Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
