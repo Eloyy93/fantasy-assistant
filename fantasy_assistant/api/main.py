@@ -15,6 +15,8 @@ from sqlalchemy.orm import Session
 
 from fantasy_assistant.api.schemas import (
     DeviceRegisterIn,
+    FormationIn,
+    FormationOut,
     OptimizedLineupOut,
     PlayerHistorialOut,
     PlayerOut,
@@ -32,6 +34,7 @@ from fantasy_assistant.db.models import (
     PlayerRecord,
     PointsHistory,
     PriceHistory,
+    TeamFormation,
     TeamPlayer,
 )
 from fantasy_assistant.jobs.sync_data import sync_once
@@ -213,11 +216,23 @@ def add_to_team(payload: TeamMemberIn, db: Session = Depends(get_db)) -> dict:
     if not player:
         raise HTTPException(status_code=404, detail=f"Jugador '{payload.player_id}' no encontrado")
 
+    if payload.slot:
+        # Si el hueco ya lo ocupaba otro jugador, no lo borramos de la
+        # plantilla — lo mandamos al banquillo (slot=None), al estilo
+        # Futbin: "colocar aquí" nunca hace desaparecer a nadie.
+        ocupante = db.execute(
+            select(TeamPlayer).where(TeamPlayer.device_id == payload.device_id, TeamPlayer.slot == payload.slot)
+        ).scalar_one_or_none()
+        if ocupante and ocupante.player_id != payload.player_id:
+            ocupante.slot = None
+
     existente = db.execute(
         select(TeamPlayer).where(TeamPlayer.device_id == payload.device_id, TeamPlayer.player_id == payload.player_id)
     ).scalar_one_or_none()
-    if not existente:
-        db.add(TeamPlayer(device_id=payload.device_id, player_id=payload.player_id))
+    if existente:
+        existente.slot = payload.slot
+    else:
+        db.add(TeamPlayer(device_id=payload.device_id, player_id=payload.player_id, slot=payload.slot))
     db.commit()
     return {"status": "añadido"}
 
@@ -251,13 +266,13 @@ def get_team(
     """Plantilla del usuario: los jugadores que ha colocado él mismo en el
     campo desde la app (independiente de las notificaciones push), con su
     variación de precio reciente y sus puntos."""
-    stmt = select(TeamPlayer.player_id).where(TeamPlayer.device_id == device_id)
-    player_ids = db.execute(stmt).scalars().all()
-    if not player_ids:
+    stmt = select(TeamPlayer.player_id, TeamPlayer.slot).where(TeamPlayer.device_id == device_id)
+    filas = db.execute(stmt).all()
+    if not filas:
         return []
 
     resultado: list[TeamPlayerOut] = []
-    for player_id in player_ids:
+    for player_id, slot in filas:
         player = db.get(PlayerRecord, player_id)
         if not player or (source and player.source != source):
             continue
@@ -294,6 +309,89 @@ def get_team(
                 variacion_precio=variacion,
                 puntos_ultima_jornada=puntos_ultima,
                 puntos_temporada=puntos_temporada,
+                slot=slot,
+            )
+        )
+
+    return resultado
+
+
+@app.get("/team/formacion", response_model=FormationOut)
+def get_formacion(device_id: str = Query(...), source: str = Query(...), db: Session = Depends(get_db)) -> FormationOut:
+    formacion = db.execute(
+        select(TeamFormation.formacion).where(TeamFormation.device_id == device_id, TeamFormation.source == source)
+    ).scalar_one_or_none()
+    return FormationOut(formacion=formacion or "4-3-3")
+
+
+@app.put("/team/formacion", status_code=204)
+def set_formacion(payload: FormationIn, db: Session = Depends(get_db)) -> None:
+    if payload.formacion not in FORMACIONES:
+        raise HTTPException(status_code=400, detail=f"Formación '{payload.formacion}' no soportada")
+
+    existente = db.execute(
+        select(TeamFormation).where(TeamFormation.device_id == payload.device_id, TeamFormation.source == payload.source)
+    ).scalar_one_or_none()
+    if existente:
+        existente.formacion = payload.formacion
+    else:
+        db.add(TeamFormation(device_id=payload.device_id, source=payload.source, formacion=payload.formacion))
+    db.commit()
+
+
+@app.get("/team/recomendados", response_model=list[TeamPlayerOut])
+def get_recomendados(
+    source: str = Query(...),
+    posicion: str = Query(...),
+    excluir: str = Query(default="", description="ids separados por coma a excluir"),
+    limit: int = Query(default=8, le=30),
+    db: Session = Depends(get_db),
+) -> list[TeamPlayerOut]:
+    """Mejores jugadores de una posición por puntos de temporada, para
+    recomendar al tocar un hueco vacío en el campo (estilo Futbin)."""
+    excluidos = {pid for pid in excluir.split(",") if pid}
+
+    puntos_totales = (
+        select(PointsHistory.player_id, func.sum(PointsHistory.puntos).label("total"))
+        .where(PointsHistory.jornada > 0)
+        .group_by(PointsHistory.player_id)
+        .subquery()
+    )
+    total_col = func.coalesce(puntos_totales.c.total, 0)
+    stmt = (
+        select(PlayerRecord, total_col)
+        .outerjoin(puntos_totales, puntos_totales.c.player_id == PlayerRecord.id)
+        .where(PlayerRecord.source == source, PlayerRecord.posicion == posicion)
+        .order_by(total_col.desc())
+        .limit(limit + len(excluidos))
+    )
+
+    resultado: list[TeamPlayerOut] = []
+    for player, puntos_temporada in db.execute(stmt).all():
+        if player.id in excluidos:
+            continue
+        if len(resultado) >= limit:
+            break
+
+        puntos_ultima = db.execute(
+            select(PointsHistory.puntos)
+            .where(PointsHistory.player_id == player.id, PointsHistory.jornada > 0)
+            .order_by(PointsHistory.jornada.desc())
+            .limit(1)
+        ).scalar_one_or_none()
+
+        resultado.append(
+            TeamPlayerOut(
+                id=player.id,
+                source=player.source,
+                nombre=player.nombre,
+                equipo=player.equipo,
+                posicion=player.posicion,
+                precio=player.precio,
+                variacion_precio=None,
+                puntos_ultima_jornada=puntos_ultima,
+                puntos_temporada=puntos_temporada,
+                slot=None,
             )
         )
 

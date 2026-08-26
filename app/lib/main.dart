@@ -258,6 +258,7 @@ class TeamScreen extends StatefulWidget {
 class _TeamScreenState extends State<TeamScreen> {
   String? _deviceId;
   String _source = 'biwenger';
+  String _formacion = '4-3-3';
   List<TeamPlayer>? _jugadores;
   String? _error;
 
@@ -279,9 +280,15 @@ class _TeamScreenState extends State<TeamScreen> {
     if (deviceId == null) return;
     setState(() => _error = null);
     try {
-      final jugadores = await widget.api.getTeam(deviceId, source: _source);
+      final resultados = await Future.wait([
+        widget.api.getTeam(deviceId, source: _source),
+        widget.api.getFormacion(deviceId: deviceId, source: _source),
+      ]);
       if (!mounted) return;
-      setState(() => _jugadores = jugadores);
+      setState(() {
+        _jugadores = resultados[0] as List<TeamPlayer>;
+        _formacion = resultados[1] as String;
+      });
     } catch (e) {
       if (!mounted) return;
       setState(() => _error = 'No se pudo cargar la plantilla: $e');
@@ -296,7 +303,19 @@ class _TeamScreenState extends State<TeamScreen> {
     _cargar();
   }
 
-  Future<void> _quitar(TeamPlayer jugador) async {
+  Future<void> _cambiarFormacion(String formacion) async {
+    final deviceId = _deviceId;
+    if (deviceId == null || formacion == _formacion) return;
+    setState(() => _formacion = formacion);
+    try {
+      await widget.api.setFormacion(deviceId: deviceId, source: _source, formacion: formacion);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('No se pudo cambiar la formación: $e')));
+    }
+  }
+
+  Future<void> _quitarDelEquipo(TeamPlayer jugador) async {
     final deviceId = _deviceId;
     if (deviceId == null) return;
     setState(() => _jugadores = _jugadores!.where((j) => j.id != jugador.id).toList());
@@ -309,7 +328,45 @@ class _TeamScreenState extends State<TeamScreen> {
     }
   }
 
-  Future<void> _anadirJugador() async {
+  Future<void> _quitarDelCampo(TeamPlayer jugador) async {
+    final deviceId = _deviceId;
+    if (deviceId == null) return;
+    try {
+      await widget.api.addToTeam(deviceId: deviceId, playerId: jugador.id);
+      _cargar();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('No se pudo actualizar: $e')));
+    }
+  }
+
+  Future<void> _elegirParaHueco(String slot, {TeamPlayer? actual}) async {
+    final deviceId = _deviceId;
+    if (deviceId == null) return;
+    final posicion = posicionDeSlot(slot);
+    final ocupandoElCampo = (_jugadores ?? [])
+        .where((j) => j.slot != null && slotsDeFormacion(_formacion).contains(j.slot))
+        .map((j) => j.id)
+        .toSet();
+
+    final elegido = await showModalBottomSheet<Player>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: kSurfaceColor,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (_) => _PlayerPickerSheet(api: widget.api, source: _source, posicion: posicion, excluir: ocupandoElCampo),
+    );
+    if (elegido == null) return;
+    try {
+      await widget.api.addToTeam(deviceId: deviceId, playerId: elegido.id, slot: slot);
+      _cargar();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('No se pudo añadir: $e')));
+    }
+  }
+
+  Future<void> _anadirAlBanquillo() async {
     final deviceId = _deviceId;
     if (deviceId == null) return;
     final elegido = await showModalBottomSheet<Player>(
@@ -317,7 +374,7 @@ class _TeamScreenState extends State<TeamScreen> {
       isScrollControlled: true,
       backgroundColor: kSurfaceColor,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (_) => _AddPlayerSheet(api: widget.api, source: _source, yaEnPlantilla: _jugadores ?? []),
+      builder: (_) => _PlayerPickerSheet(api: widget.api, source: _source, excluir: (_jugadores ?? []).map((j) => j.id).toSet()),
     );
     if (elegido == null) return;
     try {
@@ -329,15 +386,71 @@ class _TeamScreenState extends State<TeamScreen> {
     }
   }
 
+  void _verFicha(TeamPlayer j) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => PrediccionScreen(
+          player: Player(id: j.id, source: j.source, nombre: j.nombre, equipo: j.equipo, posicion: j.posicion, precio: j.precio),
+          api: widget.api,
+        ),
+      ),
+    );
+  }
+
+  void _onTapSlot(String slot, TeamPlayer? ocupante) {
+    if (ocupante == null) {
+      _elegirParaHueco(slot);
+      return;
+    }
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: kSurfaceColor,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 12),
+            ListTile(
+              leading: PositionBadge(posicion: ocupante.posicion),
+              title: Text(ocupante.nombre, style: const TextStyle(fontWeight: FontWeight.w700)),
+              subtitle: Text(ocupante.equipo),
+            ),
+            ListTile(
+              leading: const Icon(Icons.badge_rounded),
+              title: const Text('Ver ficha'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _verFicha(ocupante);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.swap_horiz_rounded),
+              title: const Text('Cambiar jugador'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _elegirParaHueco(slot, actual: ocupante);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.remove_circle_outline_rounded),
+              title: const Text('Quitar del campo'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _quitarDelCampo(ocupante);
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Mi plantilla')),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _deviceId == null ? null : _anadirJugador,
-        icon: const Icon(Icons.add_rounded),
-        label: const Text('Añadir jugador'),
-      ),
       body: RefreshIndicator(
         onRefresh: _cargar,
         child: _buildBody(context),
@@ -346,10 +459,19 @@ class _TeamScreenState extends State<TeamScreen> {
   }
 
   Widget _buildBody(BuildContext context) {
+    final slots = slotsDeFormacion(_formacion);
+    final asignados = <String, TeamPlayer>{
+      for (final j in _jugadores ?? [])
+        if (j.slot != null && slots.contains(j.slot)) j.slot!: j,
+    };
+    final banquillo = (_jugadores ?? []).where((j) => j.slot == null || !slots.contains(j.slot)).toList();
+
     return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
       children: [
         _SourceToggle(source: _source, onChanged: _onSourceChanged),
+        const SizedBox(height: 12),
+        _FormationSelector(formacion: _formacion, onChanged: _cambiarFormacion),
         const SizedBox(height: 16),
         if (_error != null)
           Padding(
@@ -362,43 +484,71 @@ class _TeamScreenState extends State<TeamScreen> {
             child: Center(child: CircularProgressIndicator()),
           )
         else ...[
-          TeamPitchView(
-            jugadores: _jugadores!,
-            onTapPlayer: (j) => Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => PrediccionScreen(
-                  player: Player(
-                    id: j.id,
-                    source: j.source,
-                    nombre: j.nombre,
-                    equipo: j.equipo,
-                    posicion: j.posicion,
-                    precio: j.precio,
-                  ),
-                  api: widget.api,
-                ),
-              ),
-            ),
+          FormationPitchView(
+            formacion: _formacion,
+            asignados: asignados,
+            onTapSlot: (slot) => _onTapSlot(slot, asignados[slot]),
           ),
           const SizedBox(height: 20),
-          if (_jugadores!.isEmpty)
+          Row(
+            children: [
+              const SectionLabel('Banquillo'),
+              const Spacer(),
+              TextButton.icon(
+                onPressed: _anadirAlBanquillo,
+                icon: const Icon(Icons.add_rounded, size: 18),
+                label: const Text('Añadir'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          if (banquillo.isEmpty)
             const Padding(
-              padding: EdgeInsets.symmetric(vertical: 20),
-              child: Center(
-                child: Text(
-                  'Todavía no has colocado jugadores en tu plantilla.\nUsa "Añadir jugador" para empezar.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: kTextSecondary),
-                ),
+              padding: EdgeInsets.symmetric(vertical: 16),
+              child: Text(
+                'Toca un hueco vacío del campo para colocar jugadores, o añade aquí a los que tengas de reserva.',
+                style: TextStyle(color: kTextSecondary),
               ),
             )
           else
-            for (final jugador in _jugadores!) ...[
-              _TeamPlayerCard(jugador: jugador, onQuitar: () => _quitar(jugador)),
+            for (final jugador in banquillo) ...[
+              _TeamPlayerCard(jugador: jugador, onQuitar: () => _quitarDelEquipo(jugador)),
               const SizedBox(height: 10),
             ],
         ],
       ],
+    );
+  }
+}
+
+class _FormationSelector extends StatelessWidget {
+  final String formacion;
+  final ValueChanged<String> onChanged;
+
+  const _FormationSelector({required this.formacion, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 36,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: kFormaciones.length,
+        separatorBuilder: (_, _) => const SizedBox(width: 8),
+        itemBuilder: (context, index) {
+          final opcion = kFormaciones.keys.elementAt(index);
+          final selected = opcion == formacion;
+          return ChoiceChip(
+            label: Text(opcion),
+            selected: selected,
+            onSelected: (_) => onChanged(opcion),
+            selectedColor: kMintAccent.withValues(alpha: 0.2),
+            side: BorderSide(color: selected ? kMintAccent.withValues(alpha: 0.6) : kBorderColor),
+            labelStyle: TextStyle(color: selected ? kMintAccent : kTextSecondary, fontWeight: FontWeight.w700),
+            backgroundColor: kSurfaceColor,
+          );
+        },
+      ),
     );
   }
 }
@@ -482,27 +632,34 @@ class _TeamPlayerCard extends StatelessWidget {
 }
 
 /// Buscador de jugadores en un bottom sheet, para añadir a la plantilla.
-class _AddPlayerSheet extends StatefulWidget {
+/// Selector de jugador en un bottom sheet: si se da [posicion], muestra
+/// primero los mejores por puntos de temporada para ese hueco (estilo
+/// Futbin) y debajo un buscador libre, filtrado a esa misma posición.
+class _PlayerPickerSheet extends StatefulWidget {
   final FantasyApiClient api;
   final String source;
-  final List<TeamPlayer> yaEnPlantilla;
+  final String? posicion;
+  final Set<String> excluir;
 
-  const _AddPlayerSheet({required this.api, required this.source, required this.yaEnPlantilla});
+  const _PlayerPickerSheet({required this.api, required this.source, this.posicion, required this.excluir});
 
   @override
-  State<_AddPlayerSheet> createState() => _AddPlayerSheetState();
+  State<_PlayerPickerSheet> createState() => _PlayerPickerSheetState();
 }
 
-class _AddPlayerSheetState extends State<_AddPlayerSheet> {
+class _PlayerPickerSheetState extends State<_PlayerPickerSheet> {
   final _controller = TextEditingController();
   Timer? _debounce;
+  List<TeamPlayer> _recomendados = [];
   List<Player> _resultados = [];
-  bool _loading = false;
+  bool _loadingRecomendados = false;
+  bool _loadingBusqueda = false;
+  bool _buscando = false;
 
   @override
   void initState() {
     super.initState();
-    _buscar('');
+    if (widget.posicion != null) _cargarRecomendados();
   }
 
   @override
@@ -512,21 +669,43 @@ class _AddPlayerSheetState extends State<_AddPlayerSheet> {
     super.dispose();
   }
 
+  Future<void> _cargarRecomendados() async {
+    setState(() => _loadingRecomendados = true);
+    try {
+      final recomendados = await widget.api.getRecomendados(
+        source: widget.source,
+        posicion: widget.posicion!,
+        excluir: widget.excluir.toList(),
+      );
+      if (!mounted) return;
+      setState(() => _recomendados = recomendados);
+    } catch (_) {
+      // silencioso: si falla, el usuario siempre puede usar el buscador
+    } finally {
+      if (mounted) setState(() => _loadingRecomendados = false);
+    }
+  }
+
   Future<void> _buscar(String query) async {
-    setState(() => _loading = true);
+    setState(() => _loadingBusqueda = true);
     try {
       final resultados = await widget.api.searchPlayers(query, source: widget.source);
       if (!mounted) return;
-      final idsEnPlantilla = widget.yaEnPlantilla.map((j) => j.id).toSet();
-      setState(() => _resultados = resultados.where((p) => !idsEnPlantilla.contains(p.id)).toList());
+      setState(
+        () => _resultados = resultados
+            .where((p) => !widget.excluir.contains(p.id))
+            .where((p) => widget.posicion == null || p.posicion == widget.posicion)
+            .toList(),
+      );
     } catch (_) {
       // silencioso: el buscador simplemente no muestra resultados
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) setState(() => _loadingBusqueda = false);
     }
   }
 
   void _onChanged(String query) {
+    setState(() => _buscando = query.isNotEmpty);
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 350), () => _buscar(query));
   }
@@ -545,30 +724,112 @@ class _AddPlayerSheetState extends State<_AddPlayerSheet> {
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
               child: TextField(
                 controller: _controller,
-                autofocus: true,
+                autofocus: false,
                 onChanged: _onChanged,
-                decoration: const InputDecoration(
-                  hintText: 'Buscar jugador para añadir',
-                  prefixIcon: Icon(Icons.search_rounded, color: kTextSecondary),
+                decoration: InputDecoration(
+                  hintText: widget.posicion != null ? 'Buscar otro ${widget.posicion}' : 'Buscar jugador para añadir',
+                  prefixIcon: const Icon(Icons.search_rounded, color: kTextSecondary),
                 ),
               ),
             ),
             SizedBox(
               height: 3,
-              child: _loading ? const LinearProgressIndicator(minHeight: 3, backgroundColor: Colors.transparent) : null,
+              child: (_loadingRecomendados || _loadingBusqueda)
+                  ? const LinearProgressIndicator(minHeight: 3, backgroundColor: Colors.transparent)
+                  : null,
             ),
             Expanded(
-              child: ListView.separated(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
-                itemCount: _resultados.length,
-                separatorBuilder: (_, _) => const SizedBox(height: 10),
-                itemBuilder: (context, index) {
-                  final player = _resultados[index];
-                  return _PlayerCard(player: player, onTap: () => Navigator.of(context).pop(player));
-                },
-              ),
+              child: _buscando
+                  ? ListView.separated(
+                      padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+                      itemCount: _resultados.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 10),
+                      itemBuilder: (context, index) {
+                        final player = _resultados[index];
+                        return _PlayerCard(player: player, onTap: () => Navigator.of(context).pop(player));
+                      },
+                    )
+                  : ListView(
+                      padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+                      children: [
+                        if (widget.posicion != null) ...[
+                          const SectionLabel('Recomendados'),
+                          const SizedBox(height: 10),
+                          if (_recomendados.isEmpty && !_loadingRecomendados)
+                            const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 12),
+                              child: Text('Sin recomendaciones disponibles todavía.', style: TextStyle(color: kTextSecondary)),
+                            ),
+                          for (final jugador in _recomendados) ...[
+                            _RecomendadoCard(
+                              jugador: jugador,
+                              onTap: () => Navigator.of(context).pop(
+                                Player(
+                                  id: jugador.id,
+                                  source: jugador.source,
+                                  nombre: jugador.nombre,
+                                  equipo: jugador.equipo,
+                                  posicion: jugador.posicion,
+                                  precio: jugador.precio,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                          ],
+                        ],
+                      ],
+                    ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _RecomendadoCard extends StatelessWidget {
+  final TeamPlayer jugador;
+  final VoidCallback onTap;
+
+  const _RecomendadoCard({required this.jugador, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: kSurfaceColor,
+      borderRadius: BorderRadius.circular(18),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(borderRadius: BorderRadius.circular(18), border: Border.all(color: kBorderColor)),
+          child: Row(
+            children: [
+              PositionBadge(posicion: jugador.posicion),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(jugador.nombre, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 2),
+                    Text(jugador.equipo, style: const TextStyle(fontSize: 13, color: kTextSecondary)),
+                  ],
+                ),
+              ),
+              Row(
+                children: [
+                  Icon(Icons.sports_soccer_rounded, size: 14, color: kMintAccent),
+                  const SizedBox(width: 3),
+                  Text(
+                    '${jugador.puntosTemporada} pts',
+                    style: const TextStyle(fontSize: 13, color: kMintAccent, fontWeight: FontWeight.w700),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );

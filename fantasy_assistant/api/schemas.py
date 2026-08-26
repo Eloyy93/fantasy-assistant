@@ -64,6 +64,9 @@ class PlayerHistorialOut(BaseModel):
 class TeamMemberIn(BaseModel):
     device_id: str
     player_id: str
+    # Hueco exacto de la formación (ej. "DEF2"). None = jugador en la
+    # plantilla sin colocar en el campo (banquillo).
+    slot: str | None = None
 
 
 class TeamPlayerOut(BaseModel):
@@ -77,3 +80,14 @@ class TeamPlayerOut(BaseModel):
     variacion_precio: int | None = None
     puntos_ultima_jornada: int | None = None
     puntos_temporada: int
+    slot: str | None = None
+
+
+class FormationIn(BaseModel):
+    device_id: str
+    source: str
+    formacion: str
+
+
+class FormationOut(BaseModel):
+    formacion: str

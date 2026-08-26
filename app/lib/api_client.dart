@@ -160,6 +160,7 @@ class TeamPlayer {
   final int? variacionPrecio;
   final int? puntosUltimaJornada;
   final int puntosTemporada;
+  final String? slot;
 
   TeamPlayer({
     required this.id,
@@ -171,6 +172,7 @@ class TeamPlayer {
     required this.variacionPrecio,
     required this.puntosUltimaJornada,
     required this.puntosTemporada,
+    this.slot,
   });
 
   factory TeamPlayer.fromJson(Map<String, dynamic> json) {
@@ -184,6 +186,7 @@ class TeamPlayer {
       variacionPrecio: json['variacion_precio'] as int?,
       puntosUltimaJornada: json['puntos_ultima_jornada'] as int?,
       puntosTemporada: json['puntos_temporada'] as int,
+      slot: json['slot'] as String?,
     );
   }
 }
@@ -308,13 +311,13 @@ class FantasyApiClient {
     return data.map((e) => TeamPlayer.fromJson(e as Map<String, dynamic>)).toList();
   }
 
-  Future<void> addToTeam({required String deviceId, required String playerId}) async {
+  Future<void> addToTeam({required String deviceId, required String playerId, String? slot}) async {
     final uri = Uri.parse('$baseUrl/team');
     final response = await http
         .post(
           uri,
           headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({'device_id': deviceId, 'player_id': playerId}),
+          body: jsonEncode({'device_id': deviceId, 'player_id': playerId, if (slot != null) 'slot': slot}),
         )
         .timeout(const Duration(seconds: 20));
     if (response.statusCode >= 300) {
@@ -351,5 +354,47 @@ class FantasyApiClient {
     if (response.statusCode >= 300) {
       throw ApiException('Error ${response.statusCode} al quitar de la plantilla');
     }
+  }
+
+  Future<String> getFormacion({required String deviceId, required String source}) async {
+    final uri = Uri.parse('$baseUrl/team/formacion').replace(
+      queryParameters: {'device_id': deviceId, 'source': source},
+    );
+    final response = await http.get(uri).timeout(const Duration(seconds: 10));
+    if (response.statusCode != 200) {
+      throw ApiException('Error ${response.statusCode} al leer la formación');
+    }
+    final body = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+    return body['formacion'] as String;
+  }
+
+  Future<void> setFormacion({required String deviceId, required String source, required String formacion}) async {
+    final uri = Uri.parse('$baseUrl/team/formacion');
+    final response = await http
+        .put(
+          uri,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'device_id': deviceId, 'source': source, 'formacion': formacion}),
+        )
+        .timeout(const Duration(seconds: 10));
+    if (response.statusCode >= 300) {
+      throw ApiException('Error ${response.statusCode} al cambiar la formación');
+    }
+  }
+
+  Future<List<TeamPlayer>> getRecomendados({
+    required String source,
+    required String posicion,
+    List<String> excluir = const [],
+  }) async {
+    final uri = Uri.parse('$baseUrl/team/recomendados').replace(
+      queryParameters: {'source': source, 'posicion': posicion, 'excluir': excluir.join(',')},
+    );
+    final response = await http.get(uri).timeout(const Duration(seconds: 15));
+    if (response.statusCode != 200) {
+      throw ApiException('Error ${response.statusCode} al buscar recomendaciones');
+    }
+    final List<dynamic> data = jsonDecode(utf8.decode(response.bodyBytes));
+    return data.map((e) => TeamPlayer.fromJson(e as Map<String, dynamic>)).toList();
   }
 }

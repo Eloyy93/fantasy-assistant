@@ -85,12 +85,38 @@ class TeamPlayer(Base):
     """Jugador que el usuario ha colocado en "Mi plantilla" desde la app.
     Identificado por un device_id local generado por la app (no el token
     FCM), para que gestionar la plantilla no dependa de tener las
-    notificaciones activadas."""
+    notificaciones activadas.
+
+    `slot` es la posición exacta dentro de la formación elegida (ej.
+    "DEF2"), al estilo Futbin/Ultimate Team — null si el jugador está en la
+    plantilla pero no colocado en el campo (añadido antes de esta función,
+    o quitado de su hueco al cambiar de formación)."""
 
     __tablename__ = "team_players"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     device_id: Mapped[str] = mapped_column(String, index=True)
     player_id: Mapped[str] = mapped_column(ForeignKey("players.id"), index=True)
+    slot: Mapped[str | None] = mapped_column(String, nullable=True)
 
-    __table_args__ = (UniqueConstraint("device_id", "player_id", name="uq_team_device_player"),)
+    __table_args__ = (
+        UniqueConstraint("device_id", "player_id", name="uq_team_device_player"),
+        # SQLite trata cada NULL como distinto en un UNIQUE, así que varios
+        # jugadores sin colocar (slot=NULL) del mismo device_id conviven sin
+        # problema — el UNIQUE solo se aplica de verdad entre huecos reales.
+        UniqueConstraint("device_id", "slot", name="uq_team_device_slot"),
+    )
+
+
+class TeamFormation(Base):
+    """Formación elegida por el usuario para "Mi plantilla", por fuente
+    (Biwenger y LaLiga Fantasy pueden tener formaciones distintas)."""
+
+    __tablename__ = "team_formations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    device_id: Mapped[str] = mapped_column(String, index=True)
+    source: Mapped[str] = mapped_column(String)
+    formacion: Mapped[str] = mapped_column(String)
+
+    __table_args__ = (UniqueConstraint("device_id", "source", name="uq_formation_device_source"),)
