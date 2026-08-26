@@ -16,7 +16,7 @@ cp .env.example .env
 
 Variables principales en `.env`:
 
-- `FANTASY_SOURCE`: `biwenger` o `laligafantasy` (ambas leen jugadores reales; el login de usuario en LaLiga Fantasy sigue sin implementar, ver más abajo).
+- `FANTASY_SOURCE`: fuente por defecto para uso desde CLI (`python -m fantasy_assistant.jobs.sync_data`) — en producción la API sincroniza **ambas** fuentes siempre, independientemente de esta variable. El usuario elige cuál ver desde la app (selector Biwenger/LaLiga Fantasy).
 - `DATABASE_URL`: por defecto SQLite local (`sqlite:///fantasy_assistant.db`).
 - `BIWENGER_EMAIL` / `BIWENGER_PASSWORD`: opcionales, solo necesarios para leer tu plantilla (optimizador, fase 2b).
 - `PRICE_PREDICTOR_UP_THRESHOLD` / `PRICE_PREDICTOR_DOWN_THRESHOLD`: umbrales del predictor de precio (módulo 1).
@@ -55,8 +55,8 @@ uvicorn fantasy_assistant.api.main:app --reload
 | Módulo 2 — Optimizador de alineación | Funcionando (mochila por posición sobre todo el mercado) |
 | Módulo 3 — Alertas | Funcionando: push por jugador, solo a los dispositivos suscritos a ese jugador concreto |
 | API REST (`fantasy_assistant/api`) | Funcionando: `/players`, `/players/{id}/prediccion`, `/lineup`, `/devices`, `/subscriptions` |
-| App Android (Flutter, `app/`) | Funcionando, apuntando al backend en producción — única interfaz de usuario |
-| Despliegue backend | **En producción en Railway**, sincronizando datos reales cada 3h |
+| App Android (Flutter, `app/`) | Funcionando, apuntando al backend en producción — única interfaz de usuario, con selector de fuente (Biwenger/LaLiga Fantasy) |
+| Despliegue backend | **En producción en Railway**, sincronizando Biwenger y LaLiga Fantasy en paralelo cada 3h (cada una independiente: si una falla no afecta a la otra) |
 | Notificaciones push (FCM) | Funcionando, verificado extremo a extremo |
 
 ## App Android (Flutter)
