@@ -44,3 +44,18 @@ class OptimizedLineupOut(BaseModel):
     jugadores: list[LineupPlayerOut]
     puntos_esperados: float
     presupuesto_usado: int
+
+
+class PricePointOut(BaseModel):
+    fecha: str
+    precio: int
+
+
+class PointsEntryOut(BaseModel):
+    jornada: int
+    puntos: int
+
+
+class PlayerHistorialOut(BaseModel):
+    precios: list[PricePointOut]
+    puntos: list[PointsEntryOut]

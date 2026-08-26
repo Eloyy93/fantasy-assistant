@@ -12,11 +12,18 @@ from fastapi import Depends, FastAPI, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from fantasy_assistant.api.schemas import DeviceRegisterIn, OptimizedLineupOut, PlayerOut, PrediccionOut, SubscriptionIn
+from fantasy_assistant.api.schemas import (
+    DeviceRegisterIn,
+    OptimizedLineupOut,
+    PlayerHistorialOut,
+    PlayerOut,
+    PrediccionOut,
+    SubscriptionIn,
+)
 from fantasy_assistant.config import config
 from fantasy_assistant.datasources import SOURCES, get_data_source
 from fantasy_assistant.db.database import SessionLocal, init_db
-from fantasy_assistant.db.models import DeviceRegistration, DeviceSubscription, PlayerRecord
+from fantasy_assistant.db.models import DeviceRegistration, DeviceSubscription, PlayerRecord, PointsHistory, PriceHistory
 from fantasy_assistant.jobs.sync_data import sync_once
 from fantasy_assistant.modules import price_predictor
 from fantasy_assistant.modules.lineup_optimizer import FORMACIONES, LineupError, optimize_lineup
@@ -101,6 +108,25 @@ def get_prediccion(player_id: str, db: Session = Depends(get_db)) -> PrediccionO
         raise HTTPException(status_code=404, detail=f"Jugador '{player_id}' no encontrado")
     result = price_predictor.predict_player(player_id)
     return PrediccionOut(player_id=result.player_id, prediccion=result.prediccion, confianza=result.confianza)
+
+
+@app.get("/players/{player_id}/historial", response_model=PlayerHistorialOut)
+def get_historial(player_id: str, db: Session = Depends(get_db)) -> PlayerHistorialOut:
+    player = db.get(PlayerRecord, player_id)
+    if not player:
+        raise HTTPException(status_code=404, detail=f"Jugador '{player_id}' no encontrado")
+
+    precios = db.execute(
+        select(PriceHistory).where(PriceHistory.player_id == player_id).order_by(PriceHistory.fecha)
+    ).scalars().all()
+    puntos = db.execute(
+        select(PointsHistory).where(PointsHistory.player_id == player_id).order_by(PointsHistory.jornada)
+    ).scalars().all()
+
+    return PlayerHistorialOut(
+        precios=[{"fecha": str(p.fecha), "precio": p.precio} for p in precios],
+        puntos=[{"jornada": p.jornada, "puntos": p.puntos} for p in puntos],
+    )
 
 
 @app.post("/devices", status_code=201)
