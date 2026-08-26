@@ -5,6 +5,10 @@ import 'package:flutter/material.dart';
 
 import 'api_client.dart';
 
+/// Token FCM de este dispositivo, disponible tras arrancar la app. Nulo
+/// hasta que _setupPushNotifications() termine (o si Firebase falla).
+String? currentFcmToken;
+
 Future<void> _setupPushNotifications() async {
   await Firebase.initializeApp();
   final messaging = FirebaseMessaging.instance;
@@ -12,6 +16,7 @@ Future<void> _setupPushNotifications() async {
   await messaging.requestPermission();
 
   final token = await messaging.getToken();
+  currentFcmToken = token;
 
   print('[push] FCM token: $token');
   if (token != null) {
@@ -28,6 +33,7 @@ Future<void> _setupPushNotifications() async {
   // Si el token rota (reinstalación, cambio de dispositivo, etc.), Firebase
   // emite uno nuevo: hay que re-registrarlo.
   FirebaseMessaging.instance.onTokenRefresh.listen((newToken) {
+    currentFcmToken = newToken;
     FantasyApiClient().registerDevice(newToken).catchError((_) {});
   });
 }
@@ -175,11 +181,14 @@ class PrediccionScreen extends StatefulWidget {
 class _PrediccionScreenState extends State<PrediccionScreen> {
   Prediccion? _prediccion;
   String? _error;
+  bool? _suscrito; // null mientras se comprueba el estado inicial
+  bool _cambiandoSuscripcion = false;
 
   @override
   void initState() {
     super.initState();
     _load();
+    _cargarEstadoSuscripcion();
   }
 
   Future<void> _load() async {
@@ -190,6 +199,43 @@ class _PrediccionScreenState extends State<PrediccionScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _error = 'No se pudo obtener la predicción: $e');
+    }
+  }
+
+  Future<void> _cargarEstadoSuscripcion() async {
+    final token = currentFcmToken;
+    if (token == null) {
+      setState(() => _suscrito = false);
+      return;
+    }
+    try {
+      final suscripciones = await widget.api.getSubscriptions(token);
+      if (!mounted) return;
+      setState(() => _suscrito = suscripciones.contains(widget.player.id));
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _suscrito = false);
+    }
+  }
+
+  Future<void> _toggleSuscripcion() async {
+    final token = currentFcmToken;
+    if (token == null || _suscrito == null) return;
+
+    setState(() => _cambiandoSuscripcion = true);
+    try {
+      if (_suscrito!) {
+        await widget.api.unsubscribe(fcmToken: token, playerId: widget.player.id);
+      } else {
+        await widget.api.subscribe(fcmToken: token, playerId: widget.player.id);
+      }
+      if (!mounted) return;
+      setState(() => _suscrito = !_suscrito!);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('No se pudo actualizar la alerta: $e')));
+    } finally {
+      if (mounted) setState(() => _cambiandoSuscripcion = false);
     }
   }
 
@@ -218,7 +264,22 @@ class _PrediccionScreenState extends State<PrediccionScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(widget.player.nombre)),
+      appBar: AppBar(
+        title: Text(widget.player.nombre),
+        actions: [
+          if (_cambiandoSuscripcion)
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2)),
+            )
+          else if (_suscrito != null)
+            IconButton(
+              icon: Icon(_suscrito! ? Icons.notifications_active : Icons.notifications_none),
+              tooltip: _suscrito! ? 'Quitar alerta de precio' : 'Avisarme de cambios de precio',
+              onPressed: currentFcmToken == null ? null : _toggleSuscripcion,
+            ),
+        ],
+      ),
       body: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(

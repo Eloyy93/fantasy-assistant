@@ -163,4 +163,42 @@ class FantasyApiClient {
         )
         .timeout(const Duration(seconds: 10));
   }
+
+  Future<void> subscribe({required String fcmToken, required String playerId}) async {
+    final uri = Uri.parse('$baseUrl/subscriptions');
+    final response = await http
+        .post(
+          uri,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'fcm_token': fcmToken, 'player_id': playerId}),
+        )
+        .timeout(const Duration(seconds: 10));
+    if (response.statusCode >= 300) {
+      throw ApiException('Error ${response.statusCode} al suscribirse');
+    }
+  }
+
+  Future<void> unsubscribe({required String fcmToken, required String playerId}) async {
+    final uri = Uri.parse('$baseUrl/subscriptions');
+    final response = await http
+        .delete(
+          uri,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'fcm_token': fcmToken, 'player_id': playerId}),
+        )
+        .timeout(const Duration(seconds: 10));
+    if (response.statusCode >= 300) {
+      throw ApiException('Error ${response.statusCode} al desuscribirse');
+    }
+  }
+
+  Future<List<String>> getSubscriptions(String fcmToken) async {
+    final uri = Uri.parse('$baseUrl/subscriptions').replace(queryParameters: {'fcm_token': fcmToken});
+    final response = await http.get(uri).timeout(const Duration(seconds: 10));
+    if (response.statusCode != 200) {
+      throw ApiException('Error ${response.statusCode} al leer suscripciones');
+    }
+    final List<dynamic> data = jsonDecode(utf8.decode(response.bodyBytes));
+    return data.cast<String>();
+  }
 }
