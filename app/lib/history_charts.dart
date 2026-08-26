@@ -42,13 +42,19 @@ class PriceHistoryChart extends StatelessWidget {
     final maxY = spots.map((s) => s.y).reduce((a, b) => a > b ? a : b);
     final margen = ((maxY - minY) * 0.15).clamp(0.05, double.infinity);
 
+    const ejeStyle = TextStyle(fontSize: 10, color: Colors.white54);
+
     return SizedBox(
       height: 180,
       child: LineChart(
         LineChartData(
           minY: minY - margen,
           maxY: maxY + margen,
-          gridData: const FlGridData(show: true, drawVerticalLine: false),
+          gridData: FlGridData(
+            show: true,
+            drawVerticalLine: false,
+            getDrawingHorizontalLine: (value) => const FlLine(color: Colors.white12, strokeWidth: 1),
+          ),
           titlesData: FlTitlesData(
             topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
             rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
@@ -63,7 +69,7 @@ class PriceHistoryChart extends StatelessWidget {
                   final fecha = precios[idx].fecha;
                   return Padding(
                     padding: const EdgeInsets.only(top: 4),
-                    child: Text('${fecha.day}/${fecha.month}', style: const TextStyle(fontSize: 10)),
+                    child: Text('${fecha.day}/${fecha.month}', style: ejeStyle),
                   );
                 },
               ),
@@ -72,7 +78,7 @@ class PriceHistoryChart extends StatelessWidget {
               sideTitles: SideTitles(
                 showTitles: true,
                 reservedSize: 40,
-                getTitlesWidget: (value, meta) => Text('${value.toStringAsFixed(1)}M', style: const TextStyle(fontSize: 10)),
+                getTitlesWidget: (value, meta) => Text('${value.toStringAsFixed(1)}M', style: ejeStyle),
               ),
             ),
           ),
@@ -81,10 +87,10 @@ class PriceHistoryChart extends StatelessWidget {
             LineChartBarData(
               spots: spots,
               isCurved: true,
-              color: colorForPosicion('MED'),
+              color: kMintAccent,
               barWidth: 3,
               dotData: const FlDotData(show: false),
-              belowBarData: BarAreaData(show: true, color: colorForPosicion('MED').withValues(alpha: 0.15)),
+              belowBarData: BarAreaData(show: true, color: kMintAccent.withValues(alpha: 0.15)),
             ),
           ],
         ),
@@ -93,10 +99,9 @@ class PriceHistoryChart extends StatelessWidget {
   }
 }
 
-/// Color según el rendimiento de la jornada: rojo (mala) -> ámbar -> verde (gran actuación).
+/// Color según el rendimiento de la jornada: rojo (mala) -> ámbar -> verde menta (buena).
 Color _colorForPuntos(int puntos) {
-  if (puntos >= 8) return const Color(0xFF1D9E4B); // gran actuación
-  if (puntos >= 4) return colorForPosicion('MED');
+  if (puntos >= 6) return kMintAccent; // gran actuación
   if (puntos >= 1) return const Color(0xFFE8A63C); // discreta
   return colorForPosicion('DEL'); // mala o no jugó
 }
@@ -116,6 +121,7 @@ class PointsHistoryChart extends StatelessWidget {
 
     final maxPuntos = puntos.map((p) => p.puntos).reduce((a, b) => a > b ? a : b);
     final maxY = maxPuntos <= 0 ? 1.0 : maxPuntos * 1.35;
+    const ejeStyle = TextStyle(fontSize: 10, color: Colors.white54);
 
     return SizedBox(
       height: 200,
@@ -123,7 +129,11 @@ class PointsHistoryChart extends StatelessWidget {
         BarChartData(
           maxY: maxY,
           minY: 0,
-          gridData: const FlGridData(show: true, drawVerticalLine: false),
+          gridData: FlGridData(
+            show: true,
+            drawVerticalLine: false,
+            getDrawingHorizontalLine: (value) => const FlLine(color: Colors.white12, strokeWidth: 1),
+          ),
           borderData: FlBorderData(show: false),
           barTouchData: BarTouchData(
             enabled: false,
@@ -133,7 +143,7 @@ class PointsHistoryChart extends StatelessWidget {
               tooltipMargin: 4,
               getTooltipItem: (group, groupIndex, rod, rodIndex) => BarTooltipItem(
                 rod.toY.toInt().toString(),
-                const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black87),
+                const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white),
               ),
             ),
           ),
@@ -141,7 +151,7 @@ class PointsHistoryChart extends StatelessWidget {
             topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
             rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
             leftTitles: AxisTitles(
-              sideTitles: SideTitles(showTitles: true, reservedSize: 28, getTitlesWidget: (v, m) => Text('${v.toInt()}', style: const TextStyle(fontSize: 10))),
+              sideTitles: SideTitles(showTitles: true, reservedSize: 28, getTitlesWidget: (v, m) => Text('${v.toInt()}', style: ejeStyle)),
             ),
             bottomTitles: AxisTitles(
               sideTitles: SideTitles(
@@ -152,7 +162,7 @@ class PointsHistoryChart extends StatelessWidget {
                   if (idx < 0 || idx >= puntos.length) return const SizedBox.shrink();
                   return Padding(
                     padding: const EdgeInsets.only(top: 4),
-                    child: Text('J${puntos[idx].jornada}', style: const TextStyle(fontSize: 10)),
+                    child: Text('J${puntos[idx].jornada}', style: ejeStyle),
                   );
                 },
               ),

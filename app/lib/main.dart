@@ -182,7 +182,7 @@ class _PlayerSearchScreenState extends State<PlayerSearchScreen> {
                     backgroundColor: colorForPosicion(player.posicion),
                     child: Text(
                       player.posicion,
-                      style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                      style: const TextStyle(color: Colors.black, fontSize: 10, fontWeight: FontWeight.bold),
                     ),
                   ),
                   title: Text(player.nombre),
@@ -348,7 +348,7 @@ class _PrediccionScreenState extends State<PrediccionScreen> {
                   backgroundColor: colorForPosicion(widget.player.posicion),
                   child: Text(
                     widget.player.posicion,
-                    style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
+                    style: const TextStyle(color: Colors.black, fontSize: 9, fontWeight: FontWeight.bold),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -518,7 +518,7 @@ class _LineupScreenState extends State<LineupScreen> {
                   backgroundColor: colorForPosicion(j.posicion),
                   child: Text(
                     j.posicion,
-                    style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                    style: const TextStyle(color: Colors.black, fontSize: 10, fontWeight: FontWeight.bold),
                   ),
                 ),
                 title: Text(j.nombre),

@@ -130,7 +130,7 @@ class _PlayerChip extends StatelessWidget {
               backgroundColor: colorForPosicion(jugador.posicion),
               child: Text(
                 jugador.posicion,
-                style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
+                style: const TextStyle(color: Colors.black, fontSize: 9, fontWeight: FontWeight.bold),
               ),
             ),
             const SizedBox(height: 2),
