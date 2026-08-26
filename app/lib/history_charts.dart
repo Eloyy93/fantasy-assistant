@@ -93,7 +93,16 @@ class PriceHistoryChart extends StatelessWidget {
   }
 }
 
-/// Puntos conseguidos jornada a jornada.
+/// Color según el rendimiento de la jornada: rojo (mala) -> ámbar -> verde (gran actuación).
+Color _colorForPuntos(int puntos) {
+  if (puntos >= 8) return const Color(0xFF1D9E4B); // gran actuación
+  if (puntos >= 4) return colorForPosicion('MED');
+  if (puntos >= 1) return const Color(0xFFE8A63C); // discreta
+  return colorForPosicion('DEL'); // mala o no jugó
+}
+
+/// Puntos conseguidos jornada a jornada, con el valor exacto encima de cada
+/// barra y color según lo buena que fue la actuación.
 class PointsHistoryChart extends StatelessWidget {
   final List<PointsEntry> puntos;
 
@@ -105,15 +114,29 @@ class PointsHistoryChart extends StatelessWidget {
       return const _SinDatos('Aún no hay puntos registrados esta temporada.');
     }
 
-    final maxY = puntos.map((p) => p.puntos).reduce((a, b) => a > b ? a : b).toDouble();
+    final maxPuntos = puntos.map((p) => p.puntos).reduce((a, b) => a > b ? a : b);
+    final maxY = maxPuntos <= 0 ? 1.0 : maxPuntos * 1.35;
 
     return SizedBox(
-      height: 180,
+      height: 200,
       child: BarChart(
         BarChartData(
-          maxY: maxY <= 0 ? 1 : maxY * 1.2,
+          maxY: maxY,
+          minY: 0,
           gridData: const FlGridData(show: true, drawVerticalLine: false),
           borderData: FlBorderData(show: false),
+          barTouchData: BarTouchData(
+            enabled: false,
+            touchTooltipData: BarTouchTooltipData(
+              getTooltipColor: (_) => Colors.transparent,
+              tooltipPadding: EdgeInsets.zero,
+              tooltipMargin: 4,
+              getTooltipItem: (group, groupIndex, rod, rodIndex) => BarTooltipItem(
+                rod.toY.toInt().toString(),
+                const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black87),
+              ),
+            ),
+          ),
           titlesData: FlTitlesData(
             topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
             rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
@@ -139,11 +162,12 @@ class PointsHistoryChart extends StatelessWidget {
             for (var i = 0; i < puntos.length; i++)
               BarChartGroupData(
                 x: i,
+                showingTooltipIndicators: [0],
                 barRods: [
                   BarChartRodData(
                     toY: puntos[i].puntos.toDouble(),
-                    color: puntos[i].puntos >= 0 ? colorForPosicion('DEL') : Colors.grey,
-                    width: 14,
+                    color: _colorForPuntos(puntos[i].puntos),
+                    width: 16,
                     borderRadius: const BorderRadius.vertical(top: Radius.circular(3)),
                   ),
                 ],
