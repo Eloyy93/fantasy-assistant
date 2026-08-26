@@ -110,13 +110,17 @@ Color _colorForPuntos(int puntos) {
 /// barra y color según lo buena que fue la actuación.
 class PointsHistoryChart extends StatelessWidget {
   final List<PointsEntry> puntos;
+  final String source;
 
-  const PointsHistoryChart({super.key, required this.puntos});
+  const PointsHistoryChart({super.key, required this.puntos, required this.source});
 
   @override
   Widget build(BuildContext context) {
     if (puntos.isEmpty) {
-      return const _SinDatos('Aún no hay puntos registrados esta temporada.');
+      final mensaje = source == 'laligafantasy'
+          ? 'LaLiga Fantasy no publica el desglose de puntos jornada a jornada para este jugador.'
+          : 'Aún no hay puntos registrados esta temporada.';
+      return _SinDatos(mensaje);
     }
 
     final maxPuntos = puntos.map((p) => p.puntos).reduce((a, b) => a > b ? a : b);

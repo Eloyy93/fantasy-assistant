@@ -546,7 +546,7 @@ class _PrediccionScreenState extends State<PrediccionScreen> {
                 padding: const EdgeInsets.fromLTRB(8, 16, 16, 8),
                 child: _errorHistorial != null || _historial == null
                     ? const SizedBox(height: 40)
-                    : PointsHistoryChart(puntos: _historial!.puntos),
+                    : PointsHistoryChart(puntos: _historial!.puntos, source: widget.player.source),
               ),
             ),
           ],
