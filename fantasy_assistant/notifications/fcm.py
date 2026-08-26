@@ -69,3 +69,35 @@ def send_alerts(alerts: list[Alert], device_tokens: list[str]) -> list[str]:
                     invalid_tokens.append(token)
 
     return invalid_tokens
+
+
+def send_alert_debug(alert: Alert, device_tokens: list[str]) -> dict:
+    """Como send_alerts, pero devuelve el detalle crudo de la respuesta de
+    FCM (para depurar el pipeline de push manualmente, ver /debug/test-alert)."""
+    app = _get_app()
+    if app is None:
+        return {"error": "Firebase no configurado"}
+    if not device_tokens:
+        return {"error": "sin tokens"}
+
+    from firebase_admin import messaging
+
+    message = messaging.MulticastMessage(
+        notification=messaging.Notification(title="Fantasy Assistant", body=alert.mensaje),
+        data={"player_id": alert.player_id},
+        tokens=device_tokens,
+    )
+    response = messaging.send_each_for_multicast(message, app=app)
+    return {
+        "success_count": response.success_count,
+        "failure_count": response.failure_count,
+        "detalles": [
+            {
+                "token": token[:20] + "...",
+                "success": result.success,
+                "message_id": result.message_id,
+                "error": str(result.exception) if result.exception else None,
+            }
+            for token, result in zip(device_tokens, response.responses)
+        ],
+    }

@@ -102,5 +102,4 @@ def register_device(payload: DeviceRegisterIn, db: Session = Depends(get_db)) ->
 def debug_test_alert(db: Session = Depends(get_db)) -> dict:
     tokens = db.execute(select(DeviceRegistration.fcm_token)).scalars().all()
     alert = Alert(player_id="test", mensaje="Alerta de prueba desde /debug/test-alert")
-    invalid = fcm.send_alerts([alert], list(tokens))
-    return {"dispositivos": len(tokens), "tokens_invalidos": invalid}
+    return fcm.send_alert_debug(alert, list(tokens))
