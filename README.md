@@ -1,7 +1,7 @@
 # Fantasy Assistant
 
 Asistente para gestionar una plantilla de fútbol fantasy (LaLiga), con dos
-fuentes de datos intercambiables: **Biwenger** y **LaLiga Fantasy** (fase 2).
+fuentes de datos intercambiables: **Biwenger** y **LaLiga Fantasy**.
 
 Interfaz principal: **app Android (Flutter)** en `app/`, hablando contra la
 API REST de este repo, con notificaciones push (Firebase Cloud Messaging)
@@ -16,7 +16,7 @@ cp .env.example .env
 
 Variables principales en `.env`:
 
-- `FANTASY_SOURCE`: `biwenger` (disponible) o `laligafantasy` (fase 2, aún sin implementar).
+- `FANTASY_SOURCE`: `biwenger` o `laligafantasy` (ambas leen jugadores reales; el login de usuario en LaLiga Fantasy sigue sin implementar, ver más abajo).
 - `DATABASE_URL`: por defecto SQLite local (`sqlite:///fantasy_assistant.db`).
 - `TELEGRAM_BOT_TOKEN`: token del bot, créalo con [@BotFather](https://t.me/BotFather).
 - `BIWENGER_EMAIL` / `BIWENGER_PASSWORD`: opcionales, solo necesarios para leer tu plantilla (`/alineacion`, fase 2).
@@ -52,12 +52,12 @@ uvicorn fantasy_assistant.api.main:app --reload
 | Componente | Estado |
 |---|---|
 | `BiwengerAdapter` | Funcionando (datos públicos de jugadores, sin auth) |
-| `LaLigaFantasyAdapter` | Stub, fase 2 (OAuth2 B2C) |
+| `LaLigaFantasyAdapter` | Jugadores + histórico de precio funcionando (endpoints públicos); login de usuario pendiente a propósito (fase 2b, ver abajo) |
 | Módulo 1 — Predictor de precio | Funcionando (reglas simples) |
 | Módulo 2 — Optimizador de alineación | Funcionando (mochila por posición sobre todo el mercado) |
-| Módulo 3 — Alertas | Funcionando (push vía FCM, cambio de precio >3% entre syncs) |
+| Módulo 3 — Alertas | Funcionando (push vía FCM a todos los dispositivos; Telegram solo a suscritos por jugador) |
 | API REST (`fantasy_assistant/api`) | Funcionando: `/players`, `/players/{id}/prediccion`, `/lineup`, `/devices` |
-| Bot de Telegram | `/prediccion` y `/alineacion` funcionando end-to-end; `/alertas` responde "pendiente" (fase 3b: suscripción por jugador) |
+| Bot de Telegram | `/prediccion`, `/alineacion` y `/alertas on\|off <jugador>` funcionando end-to-end |
 | App Android (Flutter, `app/`) | Funcionando, apuntando al backend en producción |
 | Despliegue backend | **En producción en Railway**, sincronizando datos reales cada 3h |
 | Notificaciones push (FCM) | Funcionando, verificado extremo a extremo |
@@ -112,6 +112,31 @@ una), resuelto con programación dinámica en `modules/lineup_optimizer.py`.
 # TODO fase 2b: usar la plantilla real del usuario (login + `get_user_team()`,
 ya implementado en `BiwengerAdapter`) en vez de un presupuesto manual, para
 no sugerir comprar jugadores que ya tiene.
+
+## LaLiga Fantasy — qué falta y por qué
+
+`get_all_players()` y `get_player_price_history()` funcionan de verdad
+contra los endpoints públicos de `api-fantasy.llt-services.com` (sin
+credenciales). El parseo está verificado contra el schema real documentado
+por terceros que ya la habían reverse-engineered, pero no pude probar la
+llamada HTTP en vivo — el backend de LALIGA devolvía 502 en el momento de
+escribir esto (caída de su lado). Antes de sincronizar con esta fuente por
+primera vez, comprueba que funciona:
+
+```bash
+FANTASY_SOURCE=laligafantasy python -m fantasy_assistant.jobs.sync_data
+```
+
+`login()` / `get_user_team()` siguen sin implementar **a propósito**, no
+por falta de tiempo: requieren un flujo ROPC completo contra un tenant B2C
+de Azure AD (credenciales de usuario reales, no una API key), y una de las
+fuentes consultadas para documentar esto había bloqueado explícitamente esa
+parte de su propio proyecto "hasta autorización escrita de LALIGA". Antes
+de implementarlo, vale la pena decidir conscientemente si seguir adelante.
+
+No se encontró tampoco ningún endpoint público con el nombre real de cada
+equipo (solo `teamId`) ni con los puntos por jornada (solo el acumulado de
+temporada) — quedan documentados como TODO en el propio adaptador.
 
 ## Arquitectura
 
