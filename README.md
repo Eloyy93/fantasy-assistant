@@ -3,10 +3,10 @@
 Asistente para gestionar una plantilla de fútbol fantasy (LaLiga), con dos
 fuentes de datos intercambiables: **Biwenger** y **LaLiga Fantasy**.
 
-Interfaz principal: **app Android (Flutter)** en `app/`, hablando contra la
-API REST de este repo, con notificaciones push (Firebase Cloud Messaging)
-pendientes de fase 3. El bot de Telegram se mantiene como interfaz de
-pruebas rápida.
+Interfaz **única**: app Android (Flutter) en `app/`, hablando contra la API
+REST de este repo, con notificaciones push (Firebase Cloud Messaging) por
+jugador suscrito. No hay bot de Telegram ni ninguna otra interfaz — todo
+pasa por la app.
 
 ## Configuración
 
@@ -18,8 +18,7 @@ Variables principales en `.env`:
 
 - `FANTASY_SOURCE`: `biwenger` o `laligafantasy` (ambas leen jugadores reales; el login de usuario en LaLiga Fantasy sigue sin implementar, ver más abajo).
 - `DATABASE_URL`: por defecto SQLite local (`sqlite:///fantasy_assistant.db`).
-- `TELEGRAM_BOT_TOKEN`: token del bot, créalo con [@BotFather](https://t.me/BotFather).
-- `BIWENGER_EMAIL` / `BIWENGER_PASSWORD`: opcionales, solo necesarios para leer tu plantilla (`/alineacion`, fase 2).
+- `BIWENGER_EMAIL` / `BIWENGER_PASSWORD`: opcionales, solo necesarios para leer tu plantilla (optimizador, fase 2b).
 - `PRICE_PREDICTOR_UP_THRESHOLD` / `PRICE_PREDICTOR_DOWN_THRESHOLD`: umbrales del predictor de precio (módulo 1).
 
 ## Instalación
@@ -36,13 +35,12 @@ pip install -r requirements.txt
 # Sincronizar datos a la BD local (una vez)
 python -m fantasy_assistant.jobs.sync_data
 
-# Sincronizar en bucle cada 3h (para alertas del módulo 3, fase 3)
+# Sincronizar en bucle cada 3h (para las alertas del módulo 3)
 python -m fantasy_assistant.jobs.sync_data --loop
 
-# Arrancar todo (BD + sync inicial + bot de Telegram)
+# Arrancar la API REST (única interfaz)
 python -m fantasy_assistant.main
-
-# API REST (para la futura app Android)
+# equivalente a:
 uvicorn fantasy_assistant.api.main:app --reload
 # -> docs interactivas en http://127.0.0.1:8000/docs
 ```
@@ -55,10 +53,9 @@ uvicorn fantasy_assistant.api.main:app --reload
 | `LaLigaFantasyAdapter` | Jugadores + histórico de precio funcionando (endpoints públicos); login de usuario pendiente a propósito (fase 2b, ver abajo) |
 | Módulo 1 — Predictor de precio | Funcionando (reglas simples) |
 | Módulo 2 — Optimizador de alineación | Funcionando (mochila por posición sobre todo el mercado) |
-| Módulo 3 — Alertas | Funcionando (push vía FCM a todos los dispositivos; Telegram solo a suscritos por jugador) |
-| API REST (`fantasy_assistant/api`) | Funcionando: `/players`, `/players/{id}/prediccion`, `/lineup`, `/devices` |
-| Bot de Telegram | `/prediccion`, `/alineacion` y `/alertas on\|off <jugador>` funcionando end-to-end |
-| App Android (Flutter, `app/`) | Funcionando, apuntando al backend en producción |
+| Módulo 3 — Alertas | Funcionando: push por jugador, solo a los dispositivos suscritos a ese jugador concreto |
+| API REST (`fantasy_assistant/api`) | Funcionando: `/players`, `/players/{id}/prediccion`, `/lineup`, `/devices`, `/subscriptions` |
+| App Android (Flutter, `app/`) | Funcionando, apuntando al backend en producción — única interfaz de usuario |
 | Despliegue backend | **En producción en Railway**, sincronizando datos reales cada 3h |
 | Notificaciones push (FCM) | Funcionando, verificado extremo a extremo |
 
