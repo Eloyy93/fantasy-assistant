@@ -39,9 +39,7 @@ from fantasy_assistant.db.models import (
 )
 from fantasy_assistant.jobs.sync_data import sync_once
 from fantasy_assistant.modules import price_predictor
-from fantasy_assistant.modules.alerts import Alert
 from fantasy_assistant.modules.lineup_optimizer import FORMACIONES, LineupError, optimize_lineup
-from fantasy_assistant.notifications import fcm
 
 app = FastAPI(title="Fantasy Assistant API", version="0.1.0")
 
@@ -100,26 +98,6 @@ def health(db: Session = Depends(get_db)) -> dict:
         for source_name in SOURCES
     }
     return {"status": "ok", "jugadores_por_fuente": jugadores_por_fuente}
-
-
-@app.post("/debug/test-alert")
-def test_alert(player_id: str = Query(...), db: Session = Depends(get_db)) -> dict:
-    """Envía una push de prueba (mismo mecanismo que las alertas reales de
-    precio) a todos los dispositivos registrados, para verificar el
-    pipeline de extremo a extremo sin esperar a un cambio de precio real.
-    Solo para depuración manual — no está pensado para quedarse a largo
-    plazo, no hace falta documentarlo como parte estable de la API."""
-    player = db.get(PlayerRecord, player_id)
-    if not player:
-        raise HTTPException(status_code=404, detail=f"Jugador '{player_id}' no encontrado")
-
-    tokens = db.execute(select(DeviceRegistration.fcm_token)).scalars().all()
-    if not tokens:
-        return {"status": "sin dispositivos registrados"}
-
-    alert = Alert(player_id=player_id, mensaje=f"Notificación de prueba: {player.nombre} ({player.equipo})")
-    invalidos = fcm.send_alerts([alert], list(tokens))
-    return {"status": "enviado", "dispositivos": len(tokens), "tokens_invalidos": invalidos}
 
 
 def _normalizar_busqueda(texto: str) -> str:
