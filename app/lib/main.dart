@@ -1195,14 +1195,26 @@ class _PrediccionScreenState extends State<PrediccionScreen> {
                 padding: const EdgeInsets.all(18),
                 child: Row(
                   children: [
-                    PlayerAvatar(fotoUrl: widget.player.fotoUrl, posicion: widget.player.posicion, size: 44),
-                    const SizedBox(width: 14),
+                    PlayerAvatar(fotoUrl: widget.player.fotoUrl, posicion: widget.player.posicion, size: 80),
+                    const SizedBox(width: 16),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(widget.player.equipo, style: const TextStyle(fontSize: 14, color: kTextSecondary)),
-                          const SizedBox(height: 2),
+                          Row(
+                            children: [
+                              PositionBadge(posicion: widget.player.posicion, size: 24),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  widget.player.equipo,
+                                  style: const TextStyle(fontSize: 14, color: kTextSecondary),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
                           Text(
                             '${(widget.player.precio / 1000000).toStringAsFixed(2)} M€',
                             style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
