@@ -11,6 +11,7 @@ class Player {
   final String equipo;
   final String posicion;
   final int precio;
+  final String fotoUrl;
 
   Player({
     required this.id,
@@ -19,6 +20,7 @@ class Player {
     required this.equipo,
     required this.posicion,
     required this.precio,
+    this.fotoUrl = '',
   });
 
   factory Player.fromJson(Map<String, dynamic> json) {
@@ -29,6 +31,7 @@ class Player {
       equipo: json['equipo'] as String,
       posicion: json['posicion'] as String,
       precio: json['precio'] as int,
+      fotoUrl: json['foto_url'] as String? ?? '',
     );
   }
 }
@@ -60,6 +63,7 @@ class LineupPlayer {
   final String posicion;
   final int precio;
   final double puntosEsperados;
+  final String fotoUrl;
 
   LineupPlayer({
     required this.playerId,
@@ -68,6 +72,7 @@ class LineupPlayer {
     required this.posicion,
     required this.precio,
     required this.puntosEsperados,
+    this.fotoUrl = '',
   });
 
   factory LineupPlayer.fromJson(Map<String, dynamic> json) {
@@ -78,6 +83,7 @@ class LineupPlayer {
       posicion: json['posicion'] as String,
       precio: json['precio'] as int,
       puntosEsperados: (json['puntos_esperados'] as num).toDouble(),
+      fotoUrl: json['foto_url'] as String? ?? '',
     );
   }
 }
@@ -161,6 +167,7 @@ class TeamPlayer {
   final int? puntosUltimaJornada;
   final int puntosTemporada;
   final String? slot;
+  final String fotoUrl;
 
   TeamPlayer({
     required this.id,
@@ -173,6 +180,7 @@ class TeamPlayer {
     required this.puntosUltimaJornada,
     required this.puntosTemporada,
     this.slot,
+    this.fotoUrl = '',
   });
 
   factory TeamPlayer.fromJson(Map<String, dynamic> json) {
@@ -187,6 +195,7 @@ class TeamPlayer {
       puntosUltimaJornada: json['puntos_ultima_jornada'] as int?,
       puntosTemporada: json['puntos_temporada'] as int,
       slot: json['slot'] as String?,
+      fotoUrl: json['foto_url'] as String? ?? '',
     );
   }
 }

@@ -28,6 +28,22 @@ class PlayerRecord(Base):
 
     __table_args__ = (UniqueConstraint("source", "external_id", name="uq_player_source_external_id"),)
 
+    @property
+    def foto_url(self) -> str:
+        """URL de la foto del jugador, calculada a partir de su id — no
+        hace falta guardarla en BD. Ambas fuentes usan un CDN con el id
+        externo directamente en la ruta:
+        - Biwenger: cdn.biwenger.com/i/p/{id}.png (verificado con curl).
+        - LaLiga Fantasy: media.futbolfantasy.com/uploads/images/jugadores/ficha/{id}.png.
+        No todos los jugadores tienen foto (algunas rutas dan 404) — el
+        cliente debe manejar el fallo de carga con un icono/inicial, no
+        asumir que la URL siempre resuelve."""
+        if self.source == "biwenger":
+            return f"https://cdn.biwenger.com/i/p/{self.external_id}.png"
+        if self.source == "laligafantasy":
+            return f"https://media.futbolfantasy.com/uploads/images/jugadores/ficha/{self.external_id}.png"
+        return ""
+
 
 class PriceHistory(Base):
     __tablename__ = "price_history"

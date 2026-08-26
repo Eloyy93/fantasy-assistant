@@ -310,6 +310,7 @@ def get_team(
                 puntos_ultima_jornada=puntos_ultima,
                 puntos_temporada=puntos_temporada,
                 slot=slot,
+                foto_url=player.foto_url,
             )
         )
 
@@ -392,6 +393,7 @@ def get_recomendados(
                 puntos_ultima_jornada=puntos_ultima,
                 puntos_temporada=puntos_temporada,
                 slot=None,
+                foto_url=player.foto_url,
             )
         )
 
@@ -418,6 +420,7 @@ def get_lineup(
                 "posicion": j.posicion,
                 "precio": j.precio,
                 "puntos_esperados": j.puntos_esperados,
+                "foto_url": j.foto_url,
             }
             for j in result.jugadores
         ],

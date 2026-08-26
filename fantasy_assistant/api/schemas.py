@@ -10,6 +10,7 @@ class PlayerOut(BaseModel):
     equipo: str
     posicion: str
     precio: int
+    foto_url: str = ""
 
     model_config = {"from_attributes": True}
 
@@ -37,6 +38,7 @@ class LineupPlayerOut(BaseModel):
     posicion: str
     precio: int
     puntos_esperados: float
+    foto_url: str = ""
 
 
 class OptimizedLineupOut(BaseModel):
@@ -81,6 +83,7 @@ class TeamPlayerOut(BaseModel):
     puntos_ultima_jornada: int | None = None
     puntos_temporada: int
     slot: str | None = None
+    foto_url: str = ""
 
 
 class FormationIn(BaseModel):

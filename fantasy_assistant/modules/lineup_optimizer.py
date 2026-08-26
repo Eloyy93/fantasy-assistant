@@ -57,6 +57,7 @@ class LineupPlayer:
     posicion: str
     precio: int
     puntos_esperados: float
+    foto_url: str = ""
 
 
 @dataclass
@@ -111,6 +112,7 @@ def _candidatos_por_posicion(
                 posicion=p.posicion,
                 precio=p.precio,
                 puntos_esperados=puntos_por_jugador.get(p.id, 0.0),
+                foto_url=p.foto_url,
             )
         )
 

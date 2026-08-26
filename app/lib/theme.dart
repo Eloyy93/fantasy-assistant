@@ -145,6 +145,41 @@ class PositionBadge extends StatelessWidget {
   }
 }
 
+/// Foto del jugador en un círculo, con el mismo fallback visual que
+/// [PositionBadge] (fondo tintado + iniciales de la posición) mientras
+/// carga o si la foto no existe — no toda foto resuelve (algunos jugadores
+/// no tienen imagen en la fuente).
+class PlayerAvatar extends StatelessWidget {
+  final String fotoUrl;
+  final String posicion;
+  final double size;
+
+  const PlayerAvatar({super.key, required this.fotoUrl, required this.posicion, this.size = 40});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = colorForPosicion(posicion);
+    if (fotoUrl.isEmpty) {
+      return PositionBadge(posicion: posicion, size: size);
+    }
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(size * 0.3),
+      child: Container(
+        width: size,
+        height: size,
+        color: color.withValues(alpha: 0.16),
+        child: Image.network(
+          fotoUrl,
+          fit: BoxFit.cover,
+          alignment: Alignment.topCenter,
+          errorBuilder: (_, _, _) => PositionBadge(posicion: posicion, size: size),
+          loadingBuilder: (context, child, progress) => progress == null ? child : const SizedBox.shrink(),
+        ),
+      ),
+    );
+  }
+}
+
 /// Una pequeña estadística en formato "etiqueta arriba, valor grande abajo",
 /// usada para desglosar resultados (formación, puntos, presupuesto...) en
 /// vez de meterlo todo en un párrafo de texto corrido.

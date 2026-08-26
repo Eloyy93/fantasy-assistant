@@ -104,6 +104,51 @@ class PitchView extends StatelessWidget {
   }
 }
 
+/// Círculo de 36px con foto del jugador (o el fallback de color+letra si no
+/// hay foto), con borde blanco y sombra — usado en los chips del campo.
+class _ChipAvatar extends StatelessWidget {
+  final String fotoUrl;
+  final String posicion;
+
+  const _ChipAvatar({required this.fotoUrl, required this.posicion});
+
+  Widget _fallback() => Container(
+        width: 36,
+        height: 36,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: colorForPosicion(posicion),
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.white, width: 1.5),
+          boxShadow: const [BoxShadow(color: Colors.black38, blurRadius: 4, offset: Offset(0, 2))],
+        ),
+        child: Text(posicion, style: const TextStyle(color: Colors.black, fontSize: 9, fontWeight: FontWeight.w800)),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    if (fotoUrl.isEmpty) return _fallback();
+    return Container(
+      width: 36,
+      height: 36,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white, width: 1.5),
+        boxShadow: const [BoxShadow(color: Colors.black38, blurRadius: 4, offset: Offset(0, 2))],
+      ),
+      child: ClipOval(
+        child: Image.network(
+          fotoUrl,
+          fit: BoxFit.cover,
+          alignment: Alignment.topCenter,
+          errorBuilder: (_, _, _) => _fallback(),
+          loadingBuilder: (context, child, progress) => progress == null ? child : _fallback(),
+        ),
+      ),
+    );
+  }
+}
+
 class _TeamPlayerChip extends StatelessWidget {
   final TeamPlayer jugador;
   final void Function(TeamPlayer)? onTap;
@@ -125,21 +170,7 @@ class _TeamPlayerChip extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: 36,
-              height: 36,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: colorForPosicion(jugador.posicion),
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.white, width: 1.5),
-                boxShadow: const [BoxShadow(color: Colors.black38, blurRadius: 4, offset: Offset(0, 2))],
-              ),
-              child: Text(
-                jugador.posicion,
-                style: const TextStyle(color: Colors.black, fontSize: 9, fontWeight: FontWeight.w800),
-              ),
-            ),
+            _ChipAvatar(fotoUrl: jugador.fotoUrl, posicion: jugador.posicion),
             const SizedBox(height: 2),
             ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 68),
@@ -329,21 +360,7 @@ class _PlayerChip extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: 36,
-              height: 36,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: colorForPosicion(jugador.posicion),
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.white, width: 1.5),
-                boxShadow: const [BoxShadow(color: Colors.black38, blurRadius: 4, offset: Offset(0, 2))],
-              ),
-              child: Text(
-                jugador.posicion,
-                style: const TextStyle(color: Colors.black, fontSize: 9, fontWeight: FontWeight.w800),
-              ),
-            ),
+            _ChipAvatar(fotoUrl: jugador.fotoUrl, posicion: jugador.posicion),
             const SizedBox(height: 2),
             ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 68),

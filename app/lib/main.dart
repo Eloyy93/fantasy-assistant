@@ -412,7 +412,7 @@ class _TeamScreenState extends State<TeamScreen> {
           children: [
             const SizedBox(height: 12),
             ListTile(
-              leading: PositionBadge(posicion: ocupante.posicion),
+              leading: PlayerAvatar(fotoUrl: ocupante.fotoUrl, posicion: ocupante.posicion),
               title: Text(ocupante.nombre, style: const TextStyle(fontWeight: FontWeight.w700)),
               subtitle: Text(ocupante.equipo),
             ),
@@ -578,7 +578,7 @@ class _TeamPlayerCard extends StatelessWidget {
       ),
       child: Row(
         children: [
-          PositionBadge(posicion: jugador.posicion),
+          PlayerAvatar(fotoUrl: jugador.fotoUrl, posicion: jugador.posicion),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
@@ -806,7 +806,7 @@ class _RecomendadoCard extends StatelessWidget {
           decoration: BoxDecoration(borderRadius: BorderRadius.circular(18), border: Border.all(color: kBorderColor)),
           child: Row(
             children: [
-              PositionBadge(posicion: jugador.posicion),
+              PlayerAvatar(fotoUrl: jugador.fotoUrl, posicion: jugador.posicion),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(
@@ -909,7 +909,7 @@ class _PlayerCard extends StatelessWidget {
           ),
           child: Row(
             children: [
-              PositionBadge(posicion: player.posicion),
+              PlayerAvatar(fotoUrl: player.fotoUrl, posicion: player.posicion),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(
@@ -1144,7 +1144,7 @@ class _PrediccionScreenState extends State<PrediccionScreen> {
                 padding: const EdgeInsets.all(18),
                 child: Row(
                   children: [
-                    PositionBadge(posicion: widget.player.posicion, size: 44),
+                    PlayerAvatar(fotoUrl: widget.player.fotoUrl, posicion: widget.player.posicion, size: 44),
                     const SizedBox(width: 14),
                     Expanded(
                       child: Column(
@@ -1371,7 +1371,7 @@ class _LineupScreenState extends State<LineupScreen> {
                     ),
                     child: Row(
                       children: [
-                        PositionBadge(posicion: j.posicion),
+                        PlayerAvatar(fotoUrl: j.fotoUrl, posicion: j.posicion),
                         const SizedBox(width: 14),
                         Expanded(
                           child: Column(
