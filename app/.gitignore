@@ -47,3 +47,10 @@ app.*.map.json
 # Widget Preview related
 .widget_preview/
 android/build/
+
+# Clave de firma de release — NUNCA subir esto al repo. Sin ella no se
+# pueden publicar actualizaciones futuras bajo el mismo listado de Play
+# Store: guardar el .jks y las contraseñas de key.properties en un sitio
+# seguro (gestor de contraseñas), fuera de este repositorio.
+android/key.properties
+android/keystore_secreto/
