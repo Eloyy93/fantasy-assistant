@@ -37,6 +37,16 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
+
+    // El nombre de archivo por defecto de Flutter (app-release.apk,
+    // app-debug.apk) no dice nada de la app — lo cambiamos a algo
+    // reconocible en el móvil/descargas.
+    applicationVariants.all {
+        outputs.all {
+            val output = this as com.android.build.gradle.internal.api.BaseVariantOutputImpl
+            output.outputFileName = "MasterFantasy-${buildType.name}.apk"
+        }
+    }
 }
 
 kotlin {
