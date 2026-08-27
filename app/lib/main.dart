@@ -4,10 +4,12 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
+import 'ads_service.dart';
 import 'api_client.dart';
 import 'device_id.dart';
 import 'history_charts.dart';
 import 'pitch_view.dart';
+import 'purchase_service.dart';
 import 'theme.dart';
 
 /// Token FCM de este dispositivo, disponible tras arrancar la app. Nulo
@@ -46,6 +48,8 @@ Future<void> _setupPushNotifications() async {
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   unawaited(_setupPushNotifications());
+  unawaited(initAds());
+  unawaited(PurchaseService.instance.init());
   runApp(const FantasyAssistantApp());
 }
 
@@ -140,6 +144,8 @@ class _PlayerSearchScreenState extends State<PlayerSearchScreen> {
                   Navigator.of(context).push(
                     MaterialPageRoute(builder: (_) => CompareScreen(api: _api, source: _source)),
                   );
+                case 'sin_anuncios':
+                  Navigator.of(context).push(MaterialPageRoute(builder: (_) => const NoAdsScreen()));
               }
             },
             itemBuilder: (context) => const [
@@ -164,6 +170,14 @@ class _PlayerSearchScreenState extends State<PlayerSearchScreen> {
                 child: ListTile(
                   leading: Icon(Icons.compare_arrows_rounded),
                   title: Text('Comparar jugadores'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+              PopupMenuItem(
+                value: 'sin_anuncios',
+                child: ListTile(
+                  leading: Icon(Icons.block_rounded),
+                  title: Text('Quitar anuncios'),
                   contentPadding: EdgeInsets.zero,
                 ),
               ),
@@ -253,6 +267,12 @@ class _PlayerSearchScreenState extends State<PlayerSearchScreen> {
               ),
             ),
         ],
+      ),
+      bottomNavigationBar: ValueListenableBuilder<bool>(
+        valueListenable: PurchaseService.instance.adsRemoved,
+        builder: (context, sinAnuncios, _) => sinAnuncios
+            ? const SizedBox.shrink()
+            : const SafeArea(top: false, child: Center(child: BannerAdBar())),
       ),
     );
   }
@@ -498,6 +518,114 @@ class _CompareTable extends StatelessWidget {
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+class NoAdsScreen extends StatefulWidget {
+  const NoAdsScreen({super.key});
+
+  @override
+  State<NoAdsScreen> createState() => _NoAdsScreenState();
+}
+
+class _NoAdsScreenState extends State<NoAdsScreen> {
+  bool _procesando = false;
+
+  Future<void> _suscribirse() async {
+    setState(() => _procesando = true);
+    try {
+      await PurchaseService.instance.comprar();
+    } finally {
+      if (mounted) setState(() => _procesando = false);
+    }
+  }
+
+  Future<void> _restaurar() async {
+    setState(() => _procesando = true);
+    try {
+      await PurchaseService.instance.restaurar();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Compras restauradas.')));
+    } finally {
+      if (mounted) setState(() => _procesando = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final service = PurchaseService.instance;
+    return Scaffold(
+      appBar: AppBar(title: const Text('Quitar anuncios')),
+      body: ValueListenableBuilder<bool>(
+        valueListenable: service.adsRemoved,
+        builder: (context, sinAnuncios, _) {
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(sinAnuncios ? Icons.check_circle_rounded : Icons.block_rounded, size: 48, color: kMintAccent),
+                const SizedBox(height: 16),
+                Text(
+                  sinAnuncios ? 'Ya tienes los anuncios desactivados' : 'Navega sin anuncios',
+                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  sinAnuncios
+                      ? 'Gracias por apoyar la app. Puedes gestionar o cancelar la suscripción desde Google Play.'
+                      : 'Suscripción mensual para quitar la franja de anuncios de toda la app.',
+                  style: const TextStyle(color: kTextSecondary, fontSize: 14),
+                ),
+                const SizedBox(height: 28),
+                if (!sinAnuncios) ...[
+                  if (service.productos.isNotEmpty)
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(18),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(service.productos.first.title, style: const TextStyle(fontWeight: FontWeight.w700)),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    '${service.productos.first.price} / mes',
+                                    style: const TextStyle(color: kMintAccent, fontWeight: FontWeight.w800, fontSize: 16),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  else if (service.error != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Text(service.error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                    ),
+                  const SizedBox(height: 16),
+                  FilledButton(
+                    onPressed: (_procesando || service.productos.isEmpty) ? null : _suscribirse,
+                    child: _procesando
+                        ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Text('Suscribirse'),
+                  ),
+                  const SizedBox(height: 10),
+                  OutlinedButton(
+                    onPressed: _procesando ? null : _restaurar,
+                    child: const Text('Restaurar compra anterior'),
+                  ),
+                ],
+              ],
+            ),
+          );
+        },
       ),
     );
   }

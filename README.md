@@ -60,6 +60,7 @@ uvicorn fantasy_assistant.api.main:app --reload
 | API REST (`fantasy_assistant/api`) | Funcionando: `/players` (búsqueda insensible a acentos), `/players/{id}/prediccion`, `/players/{id}/historial`, `/compare`, `/lineup`, `/devices`, `/subscriptions`, `/team`, `/team/formacion`, `/team/recomendados` |
 | Comparador de jugadores | Funcionando: `/compare?a=&b=` — puntos recientes/temporada, variación de precio y próximo rival de dos jugadores lado a lado |
 | Análisis de calendario/rival | Funcionando (rico en Biwenger, básico en LaLiga Fantasy — ver abajo): ajusta la confianza del predictor de precio (módulo 1) según qué tan difícil es el próximo rival, y se puede ver el motivo en la ficha del jugador y en el comparador |
+| Monetización | Anuncios (banner) y suscripción "sin anuncios" con código listo, ver `app/lib/ads_service.dart` y `app/lib/purchase_service.dart` — **con IDs de PRUEBA** hasta crear cuenta de AdMob y publicar en Play Store (ver sección abajo) |
 | App Android (Flutter, `app/`) | Funcionando, apuntando al backend en producción — única interfaz de usuario, con selector de fuente (Biwenger/LaLiga Fantasy) |
 | Despliegue backend | **En producción en Railway**, sincronizando Biwenger y LaLiga Fantasy en paralelo cada 3h (cada una independiente: si una falla no afecta a la otra) |
 | Notificaciones push (FCM) | Funcionando, verificado extremo a extremo |
@@ -199,6 +200,42 @@ entre peticiones para no saltar el rate-limiting del sitio (confirmado:
 sin margen, corta la conexión a partir de la petición ~40). Con eso el
 optimizador (módulo 2) recibe puntos reales de LaLiga Fantasy, no
 sintéticos, igual que ya tenía con Biwenger.
+
+## Monetización — anuncios y suscripción "sin anuncios"
+
+Código listo en `app/lib/ads_service.dart` (banner, `google_mobile_ads`) y
+`app/lib/purchase_service.dart` (suscripción mensual, `in_app_purchase`),
+pero con **IDs de prueba oficiales de Google** — no sirven anuncios reales
+ni cobran de verdad todavía. Pasos pendientes, en orden, para que esto
+genere ingresos reales:
+
+1. **Cuenta de Google Play Developer** (25$ pago único) y publicar la app
+   en Play Store — obligatorio para que la suscripción funcione, ya que
+   Play Billing (la única vía nativa de pago recurrente en Android) exige
+   distribución por Play Store.
+2. **Cuenta de AdMob**, registrar la app ahí, crear un bloque de anuncios
+   tipo "Banner". Sustituir:
+   - El App ID de prueba en `app/android/app/src/main/AndroidManifest.xml`
+     (`com.google.android.gms.ads.APPLICATION_ID`) por el real.
+   - `_testBannerAdUnitId` en `app/lib/ads_service.dart` por el Ad Unit ID
+     real del bloque banner.
+3. En **Play Console → Monetización → Productos → Suscripciones**, crear
+   un producto con el ID exacto `master_fantasy_no_ads_monthly` (constante
+   `noAdsProductId` en `app/lib/purchase_service.dart`) y el precio mensual
+   que se quiera cobrar.
+
+Hasta que se complete el paso 1, la app **no puede publicarse tal cual**
+con AdMob en modo prueba: mostrar anuncios de prueba a usuarios reales
+puede hacer que Google suspenda la cuenta de AdMob por tráfico inválido —
+el paso 2 debe ir antes de repartir el APK más ampliamente.
+
+Nota sobre seguridad de la suscripción: el estado "sin anuncios" se guarda
+localmente en el dispositivo al completarse una compra que Google Play ya
+validó en su propio flujo — suficiente para el tamaño actual del proyecto,
+pero no a prueba de manipulación (un dispositivo rooteado podría falsificar
+ese flag local). Blindarlo del todo requeriría validar el recibo contra la
+Google Play Developer API desde este mismo backend — no implementado,
+razonable de añadir si la app crece.
 
 ## Arquitectura
 
