@@ -35,6 +35,10 @@ android {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
+            // Flutter activa R8 por defecto en release aunque no se declare
+            // aquí — sin proguard-rules.pro, rompía WorkManager/Room (usados
+            // por in_app_purchase_android) con un crash real al arrancar.
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
 

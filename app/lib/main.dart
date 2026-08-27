@@ -266,13 +266,19 @@ class _PlayerSearchScreenState extends State<PlayerSearchScreen> {
                 },
               ),
             ),
+          // El banner va aquí, como un hijo más del Column — puesto en
+          // Scaffold.bottomNavigationBar (donde parece "natural" un banner
+          // fijo abajo) dejaba el resto de la pantalla en blanco: verificado
+          // en emulador que esa combinación concreta (platform view de
+          // AdMob + slot bottomNavigationBar) rompe el compositing del resto
+          // del árbol de widgets. Aquí, como hijo normal del body, funciona.
+          ValueListenableBuilder<bool>(
+            valueListenable: PurchaseService.instance.adsRemoved,
+            builder: (context, sinAnuncios, _) => sinAnuncios
+                ? const SizedBox.shrink()
+                : const SafeArea(top: false, child: Center(child: BannerAdBar())),
+          ),
         ],
-      ),
-      bottomNavigationBar: ValueListenableBuilder<bool>(
-        valueListenable: PurchaseService.instance.adsRemoved,
-        builder: (context, sinAnuncios, _) => sinAnuncios
-            ? const SizedBox.shrink()
-            : const SafeArea(top: false, child: Center(child: BannerAdBar())),
       ),
     );
   }
