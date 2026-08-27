@@ -200,6 +200,52 @@ class TeamPlayer {
   }
 }
 
+class ComparePlayer {
+  final String id;
+  final String source;
+  final String nombre;
+  final String equipo;
+  final String posicion;
+  final int precio;
+  final String fotoUrl;
+  final int? variacionPrecio;
+  final List<PointsEntry> puntosRecientes;
+  final int puntosTemporada;
+  final String? proximoRival;
+
+  ComparePlayer({
+    required this.id,
+    required this.source,
+    required this.nombre,
+    required this.equipo,
+    required this.posicion,
+    required this.precio,
+    required this.fotoUrl,
+    required this.variacionPrecio,
+    required this.puntosRecientes,
+    required this.puntosTemporada,
+    required this.proximoRival,
+  });
+
+  factory ComparePlayer.fromJson(Map<String, dynamic> json) {
+    return ComparePlayer(
+      id: json['id'] as String,
+      source: json['source'] as String,
+      nombre: json['nombre'] as String,
+      equipo: json['equipo'] as String,
+      posicion: json['posicion'] as String,
+      precio: json['precio'] as int,
+      fotoUrl: json['foto_url'] as String? ?? '',
+      variacionPrecio: json['variacion_precio'] as int?,
+      puntosRecientes: (json['puntos_recientes'] as List<dynamic>)
+          .map((e) => PointsEntry.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      puntosTemporada: json['puntos_temporada'] as int,
+      proximoRival: json['proximo_rival'] as String?,
+    );
+  }
+}
+
 class ApiException implements Exception {
   final String message;
   ApiException(this.message);
@@ -363,6 +409,20 @@ class FantasyApiClient {
     if (response.statusCode >= 300) {
       throw ApiException('Error ${response.statusCode} al quitar de la plantilla');
     }
+  }
+
+  Future<(ComparePlayer, ComparePlayer)> comparePlayers({required String a, required String b}) async {
+    final uri = Uri.parse('$baseUrl/compare').replace(queryParameters: {'a': a, 'b': b});
+    final response = await http.get(uri).timeout(const Duration(seconds: 20));
+    if (response.statusCode != 200) {
+      final body = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+      throw ApiException(body['detail']?.toString() ?? 'Error ${response.statusCode} al comparar');
+    }
+    final body = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+    return (
+      ComparePlayer.fromJson(body['a'] as Map<String, dynamic>),
+      ComparePlayer.fromJson(body['b'] as Map<String, dynamic>),
+    );
   }
 
   Future<void> clearTeam({required String deviceId, required String source}) async {

@@ -157,10 +157,14 @@ class LaLigaFantasyAdapter(FantasyDataSource):
             if not match:
                 continue
             player_id = match.group(1)
+            rival_el = row.select_one(".rival-probability")
             jugadores[player_id] = {
                 "media3": row.get("data-media3"),
                 "media5": row.get("data-media5"),
                 "puntostemporada": row.get("data-puntostemporada"),
+                # title="Jornada 3 · Próximo rival: Elche (Casa)" — nos quedamos
+                # solo con la parte de después de "Próximo rival: ".
+                "proximo_rival": (rival_el.get("title", "").split("Próximo rival: ", 1)[-1] if rival_el else ""),
             }
 
         self._puntos_cache = jugadores
@@ -253,6 +257,12 @@ class LaLigaFantasyAdapter(FantasyDataSource):
         # Desglose real jornada a jornada (ver docstring del módulo) — una
         # petición extra por jugador a /analytics/stats/detalle/.
         return self._fetch_jornadas(player_id)
+
+    def get_next_opponent(self, player_id: str) -> str | None:
+        if not self._puntos_cache:
+            self._fetch_puntos()
+        raw = self._puntos_cache.get(player_id) or {}
+        return raw.get("proximo_rival") or None
 
     def requires_auth_for_team(self) -> bool:
         return True

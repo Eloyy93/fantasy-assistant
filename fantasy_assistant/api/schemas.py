@@ -94,3 +94,22 @@ class FormationIn(BaseModel):
 
 class FormationOut(BaseModel):
     formacion: str
+
+
+class ComparePlayerOut(BaseModel):
+    id: str
+    source: str
+    nombre: str
+    equipo: str
+    posicion: str
+    precio: int
+    foto_url: str = ""
+    variacion_precio: int | None = None
+    puntos_recientes: list[PointsEntryOut]
+    puntos_temporada: int
+    proximo_rival: str | None = None
+
+
+class CompareOut(BaseModel):
+    a: ComparePlayerOut
+    b: ComparePlayerOut

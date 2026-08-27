@@ -136,6 +136,10 @@ class _PlayerSearchScreenState extends State<PlayerSearchScreen> {
                   Navigator.of(context).push(
                     MaterialPageRoute(builder: (_) => LineupScreen(api: _api, source: _source)),
                   );
+                case 'comparar':
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => CompareScreen(api: _api, source: _source)),
+                  );
               }
             },
             itemBuilder: (context) => const [
@@ -152,6 +156,14 @@ class _PlayerSearchScreenState extends State<PlayerSearchScreen> {
                 child: ListTile(
                   leading: Icon(Icons.auto_awesome_rounded),
                   title: Text('Optimizador de alineación'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+              PopupMenuItem(
+                value: 'comparar',
+                child: ListTile(
+                  leading: Icon(Icons.compare_arrows_rounded),
+                  title: Text('Comparar jugadores'),
                   contentPadding: EdgeInsets.zero,
                 ),
               ),
@@ -240,6 +252,234 @@ class _PlayerSearchScreenState extends State<PlayerSearchScreen> {
                 },
               ),
             ),
+        ],
+      ),
+    );
+  }
+}
+
+class CompareScreen extends StatefulWidget {
+  final FantasyApiClient api;
+  final String source;
+
+  const CompareScreen({super.key, required this.api, required this.source});
+
+  @override
+  State<CompareScreen> createState() => _CompareScreenState();
+}
+
+class _CompareScreenState extends State<CompareScreen> {
+  late String _source = widget.source;
+  Player? _jugadorA;
+  Player? _jugadorB;
+  (ComparePlayer, ComparePlayer)? _resultado;
+  bool _loading = false;
+  String? _error;
+
+  void _onSourceChanged(String source) {
+    setState(() {
+      _source = source;
+      _jugadorA = null;
+      _jugadorB = null;
+      _resultado = null;
+    });
+  }
+
+  Future<void> _elegir(bool esA) async {
+    final excluir = <String>{};
+    if (esA && _jugadorB != null) excluir.add(_jugadorB!.id);
+    if (!esA && _jugadorA != null) excluir.add(_jugadorA!.id);
+
+    final elegido = await showModalBottomSheet<Player>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: kSurfaceColor,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (_) => _PlayerPickerSheet(api: widget.api, source: _source, excluir: excluir),
+    );
+    if (elegido == null) return;
+
+    setState(() {
+      if (esA) {
+        _jugadorA = elegido;
+      } else {
+        _jugadorB = elegido;
+      }
+      _resultado = null;
+      _error = null;
+    });
+    _comparar();
+  }
+
+  Future<void> _comparar() async {
+    final a = _jugadorA;
+    final b = _jugadorB;
+    if (a == null || b == null) return;
+
+    setState(() => _loading = true);
+    try {
+      final resultado = await widget.api.comparePlayers(a: a.id, b: b.id);
+      if (!mounted) return;
+      setState(() => _resultado = resultado);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = 'No se pudo comparar: $e');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Comparar jugadores')),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+        children: [
+          _SourceToggle(source: _source, onChanged: _onSourceChanged),
+          const SizedBox(height: 20),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(child: _CompareSlot(player: _jugadorA, onTap: () => _elegir(true))),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 10),
+                child: Text('VS', style: TextStyle(fontWeight: FontWeight.w800, color: kTextTertiary)),
+              ),
+              Expanded(child: _CompareSlot(player: _jugadorB, onTap: () => _elegir(false))),
+            ],
+          ),
+          const SizedBox(height: 24),
+          if (_loading)
+            const Padding(padding: EdgeInsets.symmetric(vertical: 24), child: Center(child: CircularProgressIndicator())),
+          if (_error != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+            ),
+          if (_resultado != null) _CompareTable(a: _resultado!.$1, b: _resultado!.$2),
+        ],
+      ),
+    );
+  }
+}
+
+class _CompareSlot extends StatelessWidget {
+  final Player? player;
+  final VoidCallback onTap;
+
+  const _CompareSlot({required this.player, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final p = player;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(18),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 10),
+        decoration: BoxDecoration(
+          color: kSurfaceColor,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: kBorderColor),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (p == null)
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: kSurfaceHighColor,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: kBorderColor),
+                ),
+                child: const Icon(Icons.add_rounded, color: kTextSecondary),
+              )
+            else
+              PlayerAvatar(fotoUrl: p.fotoUrl, posicion: p.posicion, size: 52),
+            const SizedBox(height: 8),
+            Text(
+              p?.nombre ?? 'Elegir jugador',
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 13,
+                color: p == null ? kTextSecondary : Colors.white,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CompareTable extends StatelessWidget {
+  final ComparePlayer a;
+  final ComparePlayer b;
+
+  const _CompareTable({required this.a, required this.b});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        _fila('Precio', '${(a.precio / 1000000).toStringAsFixed(2)} M€', '${(b.precio / 1000000).toStringAsFixed(2)} M€'),
+        _fila('Variación reciente', _variacionTexto(a.variacionPrecio), _variacionTexto(b.variacionPrecio)),
+        _fila(
+          'Puntos temporada',
+          '${a.puntosTemporada}',
+          '${b.puntosTemporada}',
+          mejorA: a.puntosTemporada > b.puntosTemporada ? true : (b.puntosTemporada > a.puntosTemporada ? false : null),
+        ),
+        _fila(
+          'Últimas jornadas',
+          a.puntosRecientes.isEmpty ? '—' : a.puntosRecientes.map((p) => '${p.puntos}').join(' · '),
+          b.puntosRecientes.isEmpty ? '—' : b.puntosRecientes.map((p) => '${p.puntos}').join(' · '),
+        ),
+        _fila('Próximo rival', a.proximoRival ?? '—', b.proximoRival ?? '—'),
+      ],
+    );
+  }
+
+  String _variacionTexto(int? variacion) {
+    if (variacion == null) return '—';
+    final signo = variacion > 0 ? '+' : '';
+    return '$signo${(variacion / 1000).toStringAsFixed(0)} k€';
+  }
+
+  Widget _fila(String label, String valorA, String valorB, {bool? mejorA}) {
+    final colorA = mejorA == true ? kMintAccent : Colors.white;
+    final colorB = mejorA == false ? kMintAccent : Colors.white;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Column(
+        children: [
+          SectionLabel(label),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  valorA,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: colorA),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  valorB,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: colorB),
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );

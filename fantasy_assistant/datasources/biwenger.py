@@ -164,6 +164,34 @@ class BiwengerAdapter(FantasyDataSource):
             entries.append(PointsEntry(jornada=idx, puntos=puntos))
         return entries
 
+    def get_next_opponent(self, player_id: str) -> str | None:
+        # La misma llamada de datos de competición trae, por equipo, su
+        # próximo partido (`nextGames`) — sin petición extra por jugador.
+        payload = self._get(COMPETITION_DATA_URL, params={"lang": "es", "score": 2})
+        data = payload.get("data", {})
+        players_raw = data.get("players", {})
+        teams = data.get("teams", {})
+
+        raw = players_raw.get(player_id) or players_raw.get(int(player_id))
+        if not raw:
+            return None
+        team_id = raw.get("teamID")
+        team = teams.get(str(team_id)) or teams.get(team_id) or {}
+        next_games = team.get("nextGames") or []
+        if not next_games:
+            return None
+
+        partido = next_games[0]
+        home_id = (partido.get("home") or {}).get("id")
+        away_id = (partido.get("away") or {}).get("id")
+        es_local = home_id == team_id
+        rival_id = away_id if es_local else home_id
+        rival = teams.get(str(rival_id)) or teams.get(rival_id) or {}
+        rival_nombre = rival.get("name")
+        if not rival_nombre:
+            return None
+        return f"{rival_nombre} ({'Casa' if es_local else 'Fuera'})"
+
     def requires_auth_for_team(self) -> bool:
         return True
 

@@ -70,3 +70,10 @@ class FantasyDataSource(ABC):
 
     @abstractmethod
     def get_user_team(self, session: AuthSession) -> Team: ...
+
+    def get_next_opponent(self, player_id: str) -> str | None:
+        """Próximo rival del equipo del jugador, ej. "Barcelona (Fuera)".
+        None si no se pudo determinar. No es abstracto (default None) para
+        no obligar a implementarlo en fuentes futuras que no lo tengan;
+        usado por /compare, no crítico para el resto de la app."""
+        return None

@@ -57,7 +57,8 @@ uvicorn fantasy_assistant.api.main:app --reload
 | Módulo 2 — Optimizador de alineación | Funcionando (mochila por posición sobre todo el mercado), maximiza puntos esperados dentro del presupuesto para **ambas** fuentes (Biwenger y LaLiga Fantasy, selector `source` en `/lineup`) |
 | Módulo 3 — Alertas | Funcionando: push por jugador, solo a los dispositivos suscritos a ese jugador concreto |
 | Mi plantilla | Funcionando: sistema estilo Futbin — elige formación, toca un hueco vacío y la app recomienda los mejores jugadores de esa posición (por puntos de temporada) + buscador para añadir a cualquier otro; independiente de las notificaciones push (device_id propio) |
-| API REST (`fantasy_assistant/api`) | Funcionando: `/players` (búsqueda insensible a acentos), `/players/{id}/prediccion`, `/players/{id}/historial`, `/lineup`, `/devices`, `/subscriptions`, `/team`, `/team/formacion`, `/team/recomendados` |
+| API REST (`fantasy_assistant/api`) | Funcionando: `/players` (búsqueda insensible a acentos), `/players/{id}/prediccion`, `/players/{id}/historial`, `/compare`, `/lineup`, `/devices`, `/subscriptions`, `/team`, `/team/formacion`, `/team/recomendados` |
+| Comparador de jugadores | Funcionando: `/compare?a=&b=` — puntos recientes/temporada, variación de precio y próximo rival de dos jugadores lado a lado |
 | App Android (Flutter, `app/`) | Funcionando, apuntando al backend en producción — única interfaz de usuario, con selector de fuente (Biwenger/LaLiga Fantasy) |
 | Despliegue backend | **En producción en Railway**, sincronizando Biwenger y LaLiga Fantasy en paralelo cada 3h (cada una independiente: si una falla no afecta a la otra) |
 | Notificaciones push (FCM) | Funcionando, verificado extremo a extremo |

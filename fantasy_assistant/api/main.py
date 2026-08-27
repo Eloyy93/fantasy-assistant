@@ -6,6 +6,7 @@ Uso local:
 from __future__ import annotations
 
 import datetime as dt
+import logging
 import unicodedata
 
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -14,6 +15,8 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from fantasy_assistant.api.schemas import (
+    CompareOut,
+    ComparePlayerOut,
     DeviceRegisterIn,
     FormationIn,
     FormationOut,
@@ -40,6 +43,8 @@ from fantasy_assistant.db.models import (
 from fantasy_assistant.jobs.sync_data import sync_once
 from fantasy_assistant.modules import price_predictor
 from fantasy_assistant.modules.lineup_optimizer import FORMACIONES, LineupError, optimize_lineup
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Fantasy Assistant API", version="0.1.0")
 
@@ -159,6 +164,58 @@ def get_historial(player_id: str, db: Session = Depends(get_db)) -> PlayerHistor
         precios=[{"fecha": str(p.fecha), "precio": p.precio} for p in precios],
         puntos=[{"jornada": p.jornada, "puntos": p.puntos} for p in puntos],
     )
+
+
+def _build_compare_player(db: Session, player_id: str) -> ComparePlayerOut:
+    player = db.get(PlayerRecord, player_id)
+    if not player:
+        raise HTTPException(status_code=404, detail=f"Jugador '{player_id}' no encontrado")
+
+    precios = db.execute(
+        select(PriceHistory.precio).where(PriceHistory.player_id == player_id).order_by(PriceHistory.fecha.desc()).limit(2)
+    ).scalars().all()
+    variacion = precios[0] - precios[1] if len(precios) == 2 else None
+
+    puntos_recientes = db.execute(
+        select(PointsHistory.jornada, PointsHistory.puntos)
+        .where(PointsHistory.player_id == player_id, PointsHistory.jornada > 0)
+        .order_by(PointsHistory.jornada.desc())
+        .limit(5)
+    ).all()
+
+    puntos_temporada = db.execute(
+        select(func.coalesce(func.sum(PointsHistory.puntos), 0)).where(
+            PointsHistory.player_id == player_id, PointsHistory.jornada > 0
+        )
+    ).scalar_one()
+
+    try:
+        proximo_rival = get_data_source(player.source).get_next_opponent(player.external_id)
+    except Exception:
+        # El próximo rival es un extra "bonito de tener", no crítico — si
+        # falla la petición a la fuente (red, rate-limit...) el comparador
+        # sigue funcionando sin ese dato en vez de romperse entero.
+        logger.warning("No se pudo obtener el próximo rival de %s", player_id, exc_info=True)
+        proximo_rival = None
+
+    return ComparePlayerOut(
+        id=player.id,
+        source=player.source,
+        nombre=player.nombre,
+        equipo=player.equipo,
+        posicion=player.posicion,
+        precio=player.precio,
+        foto_url=player.foto_url,
+        variacion_precio=variacion,
+        puntos_recientes=[{"jornada": j, "puntos": p} for j, p in reversed(puntos_recientes)],
+        puntos_temporada=puntos_temporada,
+        proximo_rival=proximo_rival,
+    )
+
+
+@app.get("/compare", response_model=CompareOut)
+def compare_players(a: str = Query(...), b: str = Query(...), db: Session = Depends(get_db)) -> CompareOut:
+    return CompareOut(a=_build_compare_player(db, a), b=_build_compare_player(db, b))
 
 
 @app.post("/devices", status_code=201)
