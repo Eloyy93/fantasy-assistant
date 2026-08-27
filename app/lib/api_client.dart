@@ -40,11 +40,13 @@ class Prediccion {
   final String playerId;
   final String prediccion;
   final double confianza;
+  final RivalAnalysis? rival;
 
   Prediccion({
     required this.playerId,
     required this.prediccion,
     required this.confianza,
+    required this.rival,
   });
 
   factory Prediccion.fromJson(Map<String, dynamic> json) {
@@ -52,6 +54,7 @@ class Prediccion {
       playerId: json['player_id'] as String,
       prediccion: json['prediccion'] as String,
       confianza: (json['confianza'] as num).toDouble(),
+      rival: json['rival'] == null ? null : RivalAnalysis.fromJson(json['rival'] as Map<String, dynamic>),
     );
   }
 }
@@ -200,6 +203,35 @@ class TeamPlayer {
   }
 }
 
+class RivalAnalysis {
+  final String rival;
+  final bool casa;
+  final int? dificultad;
+  final int? partidosPrevios;
+  final int? puntosPrevios;
+  final double? mediaPrevios;
+
+  RivalAnalysis({
+    required this.rival,
+    required this.casa,
+    required this.dificultad,
+    required this.partidosPrevios,
+    required this.puntosPrevios,
+    required this.mediaPrevios,
+  });
+
+  factory RivalAnalysis.fromJson(Map<String, dynamic> json) {
+    return RivalAnalysis(
+      rival: json['rival'] as String,
+      casa: json['casa'] as bool,
+      dificultad: json['dificultad'] as int?,
+      partidosPrevios: json['partidos_previos'] as int?,
+      puntosPrevios: json['puntos_previos'] as int?,
+      mediaPrevios: (json['media_previos'] as num?)?.toDouble(),
+    );
+  }
+}
+
 class ComparePlayer {
   final String id;
   final String source;
@@ -212,6 +244,7 @@ class ComparePlayer {
   final List<PointsEntry> puntosRecientes;
   final int puntosTemporada;
   final String? proximoRival;
+  final RivalAnalysis? analisisRival;
 
   ComparePlayer({
     required this.id,
@@ -225,6 +258,7 @@ class ComparePlayer {
     required this.puntosRecientes,
     required this.puntosTemporada,
     required this.proximoRival,
+    required this.analisisRival,
   });
 
   factory ComparePlayer.fromJson(Map<String, dynamic> json) {
@@ -242,6 +276,9 @@ class ComparePlayer {
           .toList(),
       puntosTemporada: json['puntos_temporada'] as int,
       proximoRival: json['proximo_rival'] as String?,
+      analisisRival: json['analisis_rival'] == null
+          ? null
+          : RivalAnalysis.fromJson(json['analisis_rival'] as Map<String, dynamic>),
     );
   }
 }

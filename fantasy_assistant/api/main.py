@@ -24,6 +24,7 @@ from fantasy_assistant.api.schemas import (
     PlayerHistorialOut,
     PlayerOut,
     PrediccionOut,
+    RivalAnalysisOut,
     SubscriptionIn,
     TeamMemberIn,
     TeamPlayerOut,
@@ -138,7 +139,19 @@ def get_prediccion(player_id: str, db: Session = Depends(get_db)) -> PrediccionO
     if not player:
         raise HTTPException(status_code=404, detail=f"Jugador '{player_id}' no encontrado")
     result = price_predictor.predict_player(player_id)
-    return PrediccionOut(player_id=result.player_id, prediccion=result.prediccion, confianza=result.confianza)
+    rival = (
+        RivalAnalysisOut(
+            rival=result.rival.rival,
+            casa=result.rival.casa,
+            dificultad=result.rival.dificultad,
+            partidos_previos=result.rival.partidos_previos,
+            puntos_previos=result.rival.puntos_previos,
+            media_previos=result.rival.media_previos,
+        )
+        if result.rival
+        else None
+    )
+    return PrediccionOut(player_id=result.player_id, prediccion=result.prediccion, confianza=result.confianza, rival=rival)
 
 
 @app.get("/players/{player_id}/historial", response_model=PlayerHistorialOut)
@@ -190,13 +203,27 @@ def _build_compare_player(db: Session, player_id: str) -> ComparePlayerOut:
     ).scalar_one()
 
     try:
-        proximo_rival = get_data_source(player.source).get_next_opponent(player.external_id)
+        analisis = get_data_source(player.source).get_rival_analysis(player.external_id)
     except Exception:
         # El próximo rival es un extra "bonito de tener", no crítico — si
         # falla la petición a la fuente (red, rate-limit...) el comparador
         # sigue funcionando sin ese dato en vez de romperse entero.
-        logger.warning("No se pudo obtener el próximo rival de %s", player_id, exc_info=True)
-        proximo_rival = None
+        logger.warning("No se pudo obtener el análisis de rival de %s", player_id, exc_info=True)
+        analisis = None
+
+    proximo_rival = f"{analisis.rival} ({'Casa' if analisis.casa else 'Fuera'})" if analisis else None
+    analisis_rival = (
+        RivalAnalysisOut(
+            rival=analisis.rival,
+            casa=analisis.casa,
+            dificultad=analisis.dificultad,
+            partidos_previos=analisis.partidos_previos,
+            puntos_previos=analisis.puntos_previos,
+            media_previos=analisis.media_previos,
+        )
+        if analisis
+        else None
+    )
 
     return ComparePlayerOut(
         id=player.id,
@@ -210,6 +237,7 @@ def _build_compare_player(db: Session, player_id: str) -> ComparePlayerOut:
         puntos_recientes=[{"jornada": j, "puntos": p} for j, p in reversed(puntos_recientes)],
         puntos_temporada=puntos_temporada,
         proximo_rival=proximo_rival,
+        analisis_rival=analisis_rival,
     )
 
 

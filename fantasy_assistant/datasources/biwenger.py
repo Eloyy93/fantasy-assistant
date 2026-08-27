@@ -25,6 +25,7 @@ from fantasy_assistant.datasources.base import (
     Player,
     PointsEntry,
     PricePoint,
+    RivalAnalysis,
     Team,
     TeamPlayer,
 )
@@ -165,32 +166,59 @@ class BiwengerAdapter(FantasyDataSource):
         return entries
 
     def get_next_opponent(self, player_id: str) -> str | None:
-        # La misma llamada de datos de competición trae, por equipo, su
-        # próximo partido (`nextGames`) — sin petición extra por jugador.
-        payload = self._get(COMPETITION_DATA_URL, params={"lang": "es", "score": 2})
-        data = payload.get("data", {})
-        players_raw = data.get("players", {})
-        teams = data.get("teams", {})
-
-        raw = players_raw.get(player_id) or players_raw.get(int(player_id))
-        if not raw:
+        analisis = self.get_rival_analysis(player_id)
+        if not analisis:
             return None
-        team_id = raw.get("teamID")
-        team = teams.get(str(team_id)) or teams.get(team_id) or {}
+        return f"{analisis.rival} ({'Casa' if analisis.casa else 'Fuera'})"
+
+    def get_rival_analysis(self, player_id: str) -> RivalAnalysis | None:
+        # Un único endpoint de ficha de jugador da todo lo necesario:
+        # - team.nextGames: próximo partido, con equipo local/visitante y su
+        #   "difficulty.rating" (0=flojo..100=top, calculado por Biwenger).
+        # - scoreStats (con history=1): rendimiento histórico de ESTE
+        #   jugador contra cada equipo rival concreto (puntos/partidos
+        #   jugados en su contra, acumulado de todas las temporadas).
+        resp = self._http.get(
+            PLAYER_URL.format(player_id=player_id),
+            params={"lang": "es", "history": "1", "fields": "id,team,scoreStats"},
+            timeout=15,
+        )
+        if resp.status_code == 404:
+            return None
+        resp.raise_for_status()
+        data = resp.json().get("data", {})
+
+        team = data.get("team") or {}
+        team_id = team.get("id")
         next_games = team.get("nextGames") or []
         if not next_games:
             return None
 
         partido = next_games[0]
-        home_id = (partido.get("home") or {}).get("id")
-        away_id = (partido.get("away") or {}).get("id")
-        es_local = home_id == team_id
-        rival_id = away_id if es_local else home_id
-        rival = teams.get(str(rival_id)) or teams.get(rival_id) or {}
+        home = partido.get("home") or {}
+        away = partido.get("away") or {}
+        es_local = home.get("id") == team_id
+        rival = away if es_local else home
+        rival_id = rival.get("id")
         rival_nombre = rival.get("name")
-        if not rival_nombre:
+        if rival_id is None or not rival_nombre:
             return None
-        return f"{rival_nombre} ({'Casa' if es_local else 'Fuera'})"
+
+        dificultad = (rival.get("difficulty") or {}).get("rating")
+
+        stats_rival = (data.get("scoreStats") or {}).get(str(rival_id)) or {}
+        partidos_previos = (stats_rival.get("playedHome") or 0) + (stats_rival.get("playedAway") or 0)
+        puntos_previos = stats_rival.get("points")
+        media_previos = (puntos_previos / partidos_previos) if partidos_previos and puntos_previos is not None else None
+
+        return RivalAnalysis(
+            rival=rival_nombre,
+            casa=es_local,
+            dificultad=dificultad,
+            partidos_previos=partidos_previos or None,
+            puntos_previos=puntos_previos,
+            media_previos=round(media_previos, 1) if media_previos is not None else None,
+        )
 
     def requires_auth_for_team(self) -> bool:
         return True

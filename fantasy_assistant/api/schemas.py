@@ -19,6 +19,18 @@ class PrediccionOut(BaseModel):
     player_id: str
     prediccion: str
     confianza: float
+    rival: RivalAnalysisOut | None = None
+
+
+class RivalAnalysisOut(BaseModel):
+    rival: str
+    casa: bool
+    # None si la fuente no la calcula (hoy: solo Biwenger da dificultad e
+    # histórico contra el rival concreto; LaLiga Fantasy solo el nombre).
+    dificultad: int | None = None
+    partidos_previos: int | None = None
+    puntos_previos: int | None = None
+    media_previos: float | None = None
 
 
 class DeviceRegisterIn(BaseModel):
@@ -108,6 +120,7 @@ class ComparePlayerOut(BaseModel):
     puntos_recientes: list[PointsEntryOut]
     puntos_temporada: int
     proximo_rival: str | None = None
+    analisis_rival: RivalAnalysisOut | None = None
 
 
 class CompareOut(BaseModel):

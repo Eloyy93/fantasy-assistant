@@ -442,6 +442,10 @@ class _CompareTable extends StatelessWidget {
           b.puntosRecientes.isEmpty ? '—' : b.puntosRecientes.map((p) => '${p.puntos}').join(' · '),
         ),
         _fila('Próximo rival', a.proximoRival ?? '—', b.proximoRival ?? '—'),
+        if ((a.analisisRival?.dificultad != null) || (b.analisisRival?.dificultad != null))
+          _fila('Dificultad rival', _dificultadTexto(a.analisisRival), _dificultadTexto(b.analisisRival)),
+        if ((a.analisisRival?.mediaPrevios != null) || (b.analisisRival?.mediaPrevios != null))
+          _fila('Histórico vs. ese rival', _historicoRivalTexto(a.analisisRival), _historicoRivalTexto(b.analisisRival)),
       ],
     );
   }
@@ -450,6 +454,19 @@ class _CompareTable extends StatelessWidget {
     if (variacion == null) return '—';
     final signo = variacion > 0 ? '+' : '';
     return '$signo${(variacion / 1000).toStringAsFixed(0)} k€';
+  }
+
+  String _dificultadTexto(RivalAnalysis? analisis) {
+    final dificultad = analisis?.dificultad;
+    if (dificultad == null) return '—';
+    final etiqueta = dificultad >= 65 ? 'duro' : (dificultad <= 35 ? 'flojo' : 'medio');
+    return '$dificultad/100 ($etiqueta)';
+  }
+
+  String _historicoRivalTexto(RivalAnalysis? analisis) {
+    final media = analisis?.mediaPrevios;
+    if (media == null) return '—';
+    return '${media.toStringAsFixed(1)} pts/partido (${analisis!.partidosPrevios})';
   }
 
   Widget _fila(String label, String valorA, String valorB, {bool? mejorA}) {
@@ -1226,6 +1243,36 @@ class _PlayerCard extends StatelessWidget {
   }
 }
 
+/// Explica el "por qué" del ajuste de confianza: próximo rival, y si hay
+/// datos, qué tan duro es y cómo le fue a este jugador contra él antes.
+class _RivalContexto extends StatelessWidget {
+  final RivalAnalysis rival;
+
+  const _RivalContexto({required this.rival});
+
+  @override
+  Widget build(BuildContext context) {
+    final partes = <String>['Próximo rival: ${rival.rival} (${rival.casa ? 'Casa' : 'Fuera'})'];
+    if (rival.dificultad != null) {
+      final etiqueta = rival.dificultad! >= 65 ? 'duro' : (rival.dificultad! <= 35 ? 'flojo' : 'medio');
+      partes.add('dificultad ${rival.dificultad}/100 ($etiqueta)');
+    }
+    if (rival.mediaPrevios != null) {
+      partes.add('media histórica contra él: ${rival.mediaPrevios!.toStringAsFixed(1)} pts (${rival.partidosPrevios} partido${rival.partidosPrevios == 1 ? '' : 's'})');
+    }
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Icon(Icons.event_rounded, size: 16, color: kTextTertiary),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(partes.join(' · '), style: const TextStyle(color: kTextSecondary, fontSize: 12.5)),
+        ),
+      ],
+    );
+  }
+}
+
 class PrediccionScreen extends StatefulWidget {
   final Player player;
   final FantasyApiClient api;
@@ -1477,32 +1524,41 @@ class _PrediccionScreenState extends State<PrediccionScreen> {
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(18),
-                  child: Row(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Container(
-                        width: 52,
-                        height: 52,
-                        decoration: BoxDecoration(
-                          color: _colorFor(_prediccion!.prediccion).withValues(alpha: 0.16),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(_iconFor(_prediccion!.prediccion), size: 28, color: _colorFor(_prediccion!.prediccion)),
-                      ),
-                      const SizedBox(width: 16),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      Row(
                         children: [
-                          Text(
-                            _prediccion!.prediccion.toUpperCase(),
-                            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, letterSpacing: 0.3),
+                          Container(
+                            width: 52,
+                            height: 52,
+                            decoration: BoxDecoration(
+                              color: _colorFor(_prediccion!.prediccion).withValues(alpha: 0.16),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(_iconFor(_prediccion!.prediccion), size: 28, color: _colorFor(_prediccion!.prediccion)),
                           ),
-                          const SizedBox(height: 2),
-                          Text(
-                            'Confianza: ${(_prediccion!.confianza * 100).toStringAsFixed(0)}%',
-                            style: const TextStyle(color: kTextSecondary, fontSize: 13),
+                          const SizedBox(width: 16),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _prediccion!.prediccion.toUpperCase(),
+                                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, letterSpacing: 0.3),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                'Confianza: ${(_prediccion!.confianza * 100).toStringAsFixed(0)}%',
+                                style: const TextStyle(color: kTextSecondary, fontSize: 13),
+                              ),
+                            ],
                           ),
                         ],
                       ),
+                      if (_prediccion!.rival != null) ...[
+                        const Divider(height: 24),
+                        _RivalContexto(rival: _prediccion!.rival!),
+                      ],
                     ],
                   ),
                 ),

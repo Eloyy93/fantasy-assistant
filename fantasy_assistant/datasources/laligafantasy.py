@@ -56,6 +56,7 @@ from fantasy_assistant.datasources.base import (
     Player,
     PointsEntry,
     PricePoint,
+    RivalAnalysis,
     Team,
 )
 
@@ -263,6 +264,20 @@ class LaLigaFantasyAdapter(FantasyDataSource):
             self._fetch_puntos()
         raw = self._puntos_cache.get(player_id) or {}
         return raw.get("proximo_rival") or None
+
+    def get_rival_analysis(self, player_id: str) -> RivalAnalysis | None:
+        # No hay forma pública de saber la dificultad del rival ni el
+        # rendimiento histórico de un jugador contra un equipo concreto en
+        # esta fuente (a diferencia de Biwenger, que sí lo da) — solo
+        # exponemos el nombre del próximo rival, ya scrapeado de todas
+        # formas para la media de puntos.
+        texto = self.get_next_opponent(player_id)
+        if not texto:
+            return None
+        # "Elche (Casa)" -> rival="Elche", casa=True.
+        rival, _, resto = texto.rpartition(" (")
+        casa = resto.strip(")") == "Casa"
+        return RivalAnalysis(rival=rival or texto, casa=casa)
 
     def requires_auth_for_team(self) -> bool:
         return True

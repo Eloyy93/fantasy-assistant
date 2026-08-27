@@ -50,6 +50,18 @@ class Team:
     jugadores: list[TeamPlayer]
 
 
+@dataclass
+class RivalAnalysis:
+    rival: str
+    casa: bool
+    # 0 (rival flojo) .. 100 (rival top), escala de Biwenger. None si la
+    # fuente no la calcula (ej. LaLiga Fantasy).
+    dificultad: int | None = None
+    partidos_previos: int | None = None
+    puntos_previos: int | None = None
+    media_previos: float | None = None
+
+
 class FantasyDataSource(ABC):
     """Interfaz que deben implementar BiwengerAdapter y LaLigaFantasyAdapter."""
 
@@ -76,4 +88,13 @@ class FantasyDataSource(ABC):
         None si no se pudo determinar. No es abstracto (default None) para
         no obligar a implementarlo en fuentes futuras que no lo tengan;
         usado por /compare, no crítico para el resto de la app."""
+        return None
+
+    def get_rival_analysis(self, player_id: str) -> RivalAnalysis | None:
+        """Próximo rival + qué tan difícil es + cómo le ha ido a este
+        jugador contra ese rival concreto en el pasado, cuando la fuente lo
+        ofrezca (Biwenger sí, con datos ricos; LaLiga Fantasy solo el
+        nombre del rival, sin dificultad ni histórico). None si no hay
+        próximo partido conocido. Usado por /compare y por el predictor de
+        precio (módulo 1) para ajustar la confianza según el calendario."""
         return None

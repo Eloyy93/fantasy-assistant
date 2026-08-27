@@ -59,6 +59,7 @@ uvicorn fantasy_assistant.api.main:app --reload
 | Mi plantilla | Funcionando: sistema estilo Futbin — elige formación, toca un hueco vacío y la app recomienda los mejores jugadores de esa posición (por puntos de temporada) + buscador para añadir a cualquier otro; independiente de las notificaciones push (device_id propio) |
 | API REST (`fantasy_assistant/api`) | Funcionando: `/players` (búsqueda insensible a acentos), `/players/{id}/prediccion`, `/players/{id}/historial`, `/compare`, `/lineup`, `/devices`, `/subscriptions`, `/team`, `/team/formacion`, `/team/recomendados` |
 | Comparador de jugadores | Funcionando: `/compare?a=&b=` — puntos recientes/temporada, variación de precio y próximo rival de dos jugadores lado a lado |
+| Análisis de calendario/rival | Funcionando (rico en Biwenger, básico en LaLiga Fantasy — ver abajo): ajusta la confianza del predictor de precio (módulo 1) según qué tan difícil es el próximo rival, y se puede ver el motivo en la ficha del jugador y en el comparador |
 | App Android (Flutter, `app/`) | Funcionando, apuntando al backend en producción — única interfaz de usuario, con selector de fuente (Biwenger/LaLiga Fantasy) |
 | Despliegue backend | **En producción en Railway**, sincronizando Biwenger y LaLiga Fantasy en paralelo cada 3h (cada una independiente: si una falla no afecta a la otra) |
 | Notificaciones push (FCM) | Funcionando, verificado extremo a extremo |
@@ -100,6 +101,32 @@ Para probar la imagen en local antes de desplegar (necesita Docker Desktop arran
 docker build -t fantasy-assistant-api .
 docker run -p 8000:8000 -e FANTASY_SOURCE=biwenger fantasy-assistant-api
 ```
+
+## Módulo 1 — Análisis de calendario/rival
+
+`FantasyDataSource.get_rival_analysis(player_id)` da el próximo rival del
+jugador y, cuando la fuente lo permite, qué tan duro es ese rival y cómo le
+ha ido a este jugador contra él en el pasado:
+
+- **Biwenger**: rico. Un único endpoint de ficha de jugador
+  (`/players/la-liga/{id}?history=1&fields=id,team,scoreStats`) da el
+  próximo partido con una `difficulty.rating` (0=flojo..100=top, calculada
+  por el propio Biwenger) **y** `scoreStats`, el rendimiento histórico de
+  ese jugador concreto contra cada rival concreto (puntos y partidos
+  jugados en su contra, acumulado de todas las temporadas) — sin peticiones
+  extra más allá de la que ya hace `get_player_price_history()`.
+- **LaLiga Fantasy**: básico. No hay forma pública de saber la dificultad
+  del rival ni el histórico jugador-contra-equipo — solo el nombre del
+  próximo rival, ya disponible en el scraping que se hace cada sync para la
+  media de puntos.
+
+El predictor de precio (`price_predictor.predict_for_points`) usa la
+dificultad del rival (cuando la hay) para subir o bajar la **confianza** de
+su predicción — nunca para cambiar si dice "sube"/"baja"/"estable", que
+sigue basándose solo en los puntos reales. Un rival flojo que refuerza una
+tendencia de subida da más seguridad; un rival duro que la contradice,
+menos. Se puede ver el motivo tanto en la ficha del jugador
+(`/players/{id}/prediccion`) como en el comparador (`/compare`).
 
 ## Módulo 2 — Optimizador de alineación
 
