@@ -199,6 +199,8 @@ class _DesktopShellState extends State<DesktopShell> {
                       TextButton(onPressed: abrirPrivacidad, child: const Text('Privacidad', style: TextStyle(fontSize: 12, color: kTextTertiary))),
                       TextButton(onPressed: abrirCookies, child: const Text('Cookies', style: TextStyle(fontSize: 12, color: kTextTertiary))),
                       TextButton(onPressed: abrirAvisoLegal, child: const Text('Aviso legal', style: TextStyle(fontSize: 12, color: kTextTertiary))),
+                      const SizedBox(height: 4),
+                      const Text('© 2026 Master Fantasy', style: TextStyle(fontSize: 11, color: kTextTertiary)),
                     ],
                   ),
                 ),
@@ -508,13 +510,18 @@ class _PlayerSearchScreenState extends State<PlayerSearchScreen> {
         // del árbol de widgets. Aquí, como hijo normal del body, funciona.
         // En escritorio no se muestra: el anuncio va en la barra lateral
         // (buildAdsenseSidebar), un banner de 320x50 se perdería ahí.
-        if (!desktop)
+        if (!desktop) ...[
           ValueListenableBuilder<bool>(
             valueListenable: PurchaseService.instance.adsRemoved,
             builder: (context, sinAnuncios, _) => sinAnuncios
                 ? const SizedBox.shrink()
                 : const SafeArea(top: false, child: Center(child: BannerAdBar())),
           ),
+          const Padding(
+            padding: EdgeInsets.only(bottom: 8),
+            child: Text('© 2026 Master Fantasy', style: TextStyle(fontSize: 11, color: kTextTertiary)),
+          ),
+        ],
       ],
     );
 
