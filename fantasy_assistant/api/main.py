@@ -640,9 +640,11 @@ def get_lineup(
     presupuesto: int = Query(..., gt=0, description="Presupuesto disponible en euros"),
     formacion: str = Query(default="4-3-3", description=f"Una de: {', '.join(FORMACIONES)}"),
     source: str = Query(default=config.fantasy_source),
+    fijos: str = Query(default="", description="Ids de jugadores que ya se quieren tener sí o sí, separados por comas"),
 ) -> OptimizedLineupOut:
+    ids_fijos = [f for f in fijos.split(",") if f]
     try:
-        result = optimize_lineup(presupuesto=presupuesto, formacion=formacion, source=source)
+        result = optimize_lineup(presupuesto=presupuesto, formacion=formacion, source=source, fijos=ids_fijos)
     except LineupError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return OptimizedLineupOut(

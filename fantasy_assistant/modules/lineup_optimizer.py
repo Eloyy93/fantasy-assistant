@@ -179,7 +179,16 @@ def _reconstruir(candidatos: list[LineupPlayer], dp_history: list, j: int, b: in
     return elegidos
 
 
-def optimize_lineup(presupuesto: int, formacion: str = "4-3-3", source: str | None = None) -> OptimizedLineup:
+def optimize_lineup(
+    presupuesto: int,
+    formacion: str = "4-3-3",
+    source: str | None = None,
+    fijos: list[str] | None = None,
+) -> OptimizedLineup:
+    """`fijos` son ids de jugadores que el usuario ya quiere tener sí o sí
+    en la alineación (ej. los que ya tiene en su plantilla real) — el
+    optimizador los da por puestos y solo calcula los huecos que faltan,
+    con el presupuesto que quede libre tras pagarlos."""
     formacion = formacion.strip()
     if formacion not in FORMACIONES:
         raise LineupError(f"Formación '{formacion}' no soportada. Usa una de: {', '.join(FORMACIONES)}")
@@ -190,14 +199,44 @@ def optimize_lineup(presupuesto: int, formacion: str = "4-3-3", source: str | No
     formacion_counts = FORMACIONES[formacion]
     grupos = {"POR": 1, **formacion_counts}
 
-    bucket_size = BUCKET_SIZE
-    max_bucket = presupuesto // bucket_size
-    if max_bucket > MAX_BUCKETS:
-        bucket_size = presupuesto // MAX_BUCKETS + 1
-        max_bucket = presupuesto // bucket_size
-
     with get_session() as session:
+        jugadores_fijos = _resolver_fijos(session, fijos or [], source)
         candidatos_por_posicion = _candidatos_por_posicion(session, source, formacion_counts)
+
+    # Cada fijo ocupa un hueco de su posición (y no debe volver a
+    # aparecer como candidato del optimizador) y resta su precio del
+    # presupuesto disponible para el resto.
+    fijos_ids = {jf.player_id for jf in jugadores_fijos}
+    for jf in jugadores_fijos:
+        if jf.posicion not in grupos:
+            raise LineupError(f"La formación '{formacion}' no tiene huecos de posición '{jf.posicion}'")
+        grupos[jf.posicion] -= 1
+        if grupos[jf.posicion] < 0:
+            raise LineupError(f"Hay más jugadores fijos de '{jf.posicion}' que huecos en la formación '{formacion}'")
+    for posicion, candidatos in candidatos_por_posicion.items():
+        candidatos_por_posicion[posicion] = [c for c in candidatos if c.player_id not in fijos_ids]
+
+    presupuesto_fijos = sum(jf.precio for jf in jugadores_fijos)
+    presupuesto_restante = presupuesto - presupuesto_fijos
+    if presupuesto_restante < 0:
+        raise LineupError("El presupuesto no alcanza para pagar a los jugadores fijos elegidos")
+
+    # Si los fijos ya cubren toda la formación no hay nada que optimizar —
+    # se devuelve tal cual sin gastar tiempo en una mochila vacía.
+    grupos = {posicion: n for posicion, n in grupos.items() if n > 0}
+    if not grupos:
+        return OptimizedLineup(
+            formacion=formacion,
+            jugadores=jugadores_fijos,
+            puntos_esperados=round(sum(j.puntos_esperados for j in jugadores_fijos), 2),
+            presupuesto_usado=presupuesto_fijos,
+        )
+
+    bucket_size = BUCKET_SIZE
+    max_bucket = presupuesto_restante // bucket_size
+    if max_bucket > MAX_BUCKETS:
+        bucket_size = presupuesto_restante // MAX_BUCKETS + 1
+        max_bucket = presupuesto_restante // bucket_size
 
     for posicion, n in grupos.items():
         if len(candidatos_por_posicion.get(posicion, [])) < n:
@@ -243,8 +282,8 @@ def optimize_lineup(presupuesto: int, formacion: str = "4-3-3", source: str | No
     if mejor_valor == NEG_INF:
         raise LineupError("No se pudo formar una alineación completa con ese presupuesto")
 
-    jugadores: list[LineupPlayer] = []
-    presupuesto_usado = 0
+    jugadores: list[LineupPlayer] = list(jugadores_fijos)
+    presupuesto_usado = presupuesto_fijos
     for posicion, b_asignado in reparto:
         _, indices = tablas_grupo[posicion][b_asignado]
         for idx in indices:
@@ -258,3 +297,24 @@ def optimize_lineup(presupuesto: int, formacion: str = "4-3-3", source: str | No
         puntos_esperados=round(sum(j.puntos_esperados for j in jugadores), 2),
         presupuesto_usado=presupuesto_usado,
     )
+
+
+def _resolver_fijos(session, fijos: list[str], source: str) -> list[LineupPlayer]:
+    puntos_por_jugador = _puntos_esperados_por_jugador(session, source) if fijos else {}
+    resultado: list[LineupPlayer] = []
+    for player_id in fijos:
+        player = session.get(PlayerRecord, player_id)
+        if not player or player.source != source:
+            raise LineupError(f"Jugador fijo '{player_id}' no encontrado en la fuente '{source}'")
+        resultado.append(
+            LineupPlayer(
+                player_id=player.id,
+                nombre=player.nombre,
+                equipo=player.equipo,
+                posicion=player.posicion,
+                precio=player.precio,
+                puntos_esperados=puntos_por_jugador.get(player.id, 0.0),
+                foto_url=player.foto_url,
+            )
+        )
+    return resultado

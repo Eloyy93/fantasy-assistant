@@ -1015,7 +1015,7 @@ class _TeamScreenState extends State<TeamScreen> {
             ListTile(
               leading: PlayerAvatar(fotoUrl: ocupante.fotoUrl, posicion: ocupante.posicion),
               title: Text(ocupante.nombre, style: const TextStyle(fontWeight: FontWeight.w700)),
-              subtitle: Text(ocupante.equipo),
+              subtitle: Text(equipoLabel(ocupante.equipo)),
             ),
             ListTile(
               leading: const Icon(Icons.badge_rounded),
@@ -1329,7 +1329,7 @@ class _TeamPlayerCard extends StatelessWidget {
               children: [
                 Text(jugador.nombre, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
                 const SizedBox(height: 2),
-                Text(jugador.equipo, style: const TextStyle(fontSize: 13, color: kTextSecondary)),
+                Text(equipoLabel(jugador.equipo), style: const TextStyle(fontSize: 13, color: kTextSecondary)),
               ],
             ),
           ),
@@ -1557,7 +1557,7 @@ class _RecomendadoCard extends StatelessWidget {
                   children: [
                     Text(jugador.nombre, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
                     const SizedBox(height: 2),
-                    Text(jugador.equipo, style: const TextStyle(fontSize: 13, color: kTextSecondary)),
+                    Text(equipoLabel(jugador.equipo), style: const TextStyle(fontSize: 13, color: kTextSecondary)),
                   ],
                 ),
               ),
@@ -1695,7 +1695,9 @@ class _CaptainCard extends StatelessWidget {
                 Text(candidato.nombre, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
                 const SizedBox(height: 2),
                 Text(
-                  candidato.proximoRival != null ? '${candidato.equipo} · vs ${candidato.proximoRival}' : candidato.equipo,
+                  candidato.proximoRival != null
+                      ? '${equipoLabel(candidato.equipo)} · vs ${candidato.proximoRival}'
+                      : equipoLabel(candidato.equipo),
                   style: const TextStyle(fontSize: 13, color: kTextSecondary),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -1887,7 +1889,7 @@ class _BargainCard extends StatelessWidget {
                 Text(chollo.nombre, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
                 const SizedBox(height: 2),
                 Text(
-                  '${chollo.equipo} · ${(chollo.precio / 1000000).toStringAsFixed(2)} M€',
+                  '${equipoLabel(chollo.equipo)} · ${(chollo.precio / 1000000).toStringAsFixed(2)} M€',
                   style: const TextStyle(fontSize: 13, color: kTextSecondary),
                 ),
               ],
@@ -1994,7 +1996,7 @@ class _PlayerCard extends StatelessWidget {
                   children: [
                     Text(player.nombre, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
                     const SizedBox(height: 2),
-                    Text(player.equipo, style: const TextStyle(fontSize: 13, color: kTextSecondary)),
+                    Text(equipoLabel(player.equipo), style: const TextStyle(fontSize: 13, color: kTextSecondary)),
                   ],
                 ),
               ),
@@ -2263,7 +2265,7 @@ class _PrediccionScreenState extends State<PrediccionScreen> {
                               const SizedBox(width: 8),
                               Expanded(
                                 child: Text(
-                                  widget.player.equipo,
+                                  equipoLabel(widget.player.equipo),
                                   style: const TextStyle(fontSize: 14, color: kTextSecondary),
                                   overflow: TextOverflow.ellipsis,
                                 ),
@@ -2382,11 +2384,32 @@ class _LineupScreenState extends State<LineupScreen> {
   bool _loading = false;
   bool _aplicando = false;
   String? _error;
+  final List<Player> _fijos = [];
 
   @override
   void dispose() {
     _presupuestoController.dispose();
     super.dispose();
+  }
+
+  Future<void> _elegirFijo() async {
+    final elegido = await showModalBottomSheet<Player>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: kSurfaceColor,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (_) => _PlayerPickerSheet(
+        api: widget.api,
+        source: widget.source,
+        excluir: _fijos.map((p) => p.id).toSet(),
+      ),
+    );
+    if (elegido == null) return;
+    setState(() => _fijos.add(elegido));
+  }
+
+  void _quitarFijo(Player jugador) {
+    setState(() => _fijos.removeWhere((p) => p.id == jugador.id));
   }
 
   Future<void> _calcular() async {
@@ -2406,6 +2429,7 @@ class _LineupScreenState extends State<LineupScreen> {
         presupuesto: presupuesto,
         formacion: _formacion,
         source: widget.source,
+        fijos: _fijos.map((p) => p.id).toList(),
       );
       if (!mounted) return;
       setState(() => _resultado = resultado);
@@ -2464,6 +2488,55 @@ class _LineupScreenState extends State<LineupScreen> {
     } finally {
       if (mounted) setState(() => _aplicando = false);
     }
+  }
+
+  Widget _fijosSection() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Jugadores fijos',
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: _elegirFijo,
+                  icon: const Icon(Icons.add_rounded, size: 18),
+                  label: const Text('Añadir'),
+                ),
+              ],
+            ),
+            Text(
+              'El optimizador los da por puestos y solo calcula quién falta.',
+              style: const TextStyle(color: kTextSecondary, fontSize: 12),
+            ),
+            if (_fijos.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final jugador in _fijos)
+                    Chip(
+                      avatar: PlayerAvatar(fotoUrl: jugador.fotoUrl, posicion: jugador.posicion, size: 22),
+                      label: Text(jugador.nombre),
+                      onDeleted: () => _quitarFijo(jugador),
+                      backgroundColor: kSurfaceHighColor,
+                      side: const BorderSide(color: kBorderColor),
+                    ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _controles() {
@@ -2544,7 +2617,7 @@ class _LineupScreenState extends State<LineupScreen> {
                     Text(j.nombre, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
                     const SizedBox(height: 2),
                     Text(
-                      '${j.equipo} · ${j.puntosEsperados.toStringAsFixed(1)} pts',
+                      '${equipoLabel(j.equipo)} · ${j.puntosEsperados.toStringAsFixed(1)} pts',
                       style: const TextStyle(fontSize: 13, color: kTextSecondary),
                     ),
                   ],
@@ -2565,6 +2638,8 @@ class _LineupScreenState extends State<LineupScreen> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
       children: [
+        _fijosSection(),
+        const SizedBox(height: 16),
         _controles(),
         const SizedBox(height: 16),
         FilledButton(
@@ -2608,6 +2683,8 @@ class _LineupScreenState extends State<LineupScreen> {
             flex: 3,
             child: Column(
               children: [
+                _fijosSection(),
+                const SizedBox(height: 16),
                 _controles(),
                 const SizedBox(height: 16),
                 FilledButton(

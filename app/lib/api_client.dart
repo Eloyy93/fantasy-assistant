@@ -14,6 +14,10 @@ String webSafePhotoUrl(String fotoUrl) {
   return '$kApiBaseUrl/proxy/photo?url=${Uri.encodeComponent(fotoUrl)}';
 }
 
+/// Algunos jugadores (agentes libres, retirados...) no tienen equipo en la
+/// fuente — mostrar "Sin equipo" en vez de dejar el hueco en blanco.
+String equipoLabel(String equipo) => equipo.trim().isEmpty ? 'Sin equipo' : equipo;
+
 class Player {
   final String id;
   final String source;
@@ -407,9 +411,15 @@ class FantasyApiClient {
     required int presupuesto,
     String formacion = '4-3-3',
     required String source,
+    List<String> fijos = const [],
   }) async {
     final uri = Uri.parse('$baseUrl/lineup').replace(
-      queryParameters: {'presupuesto': '$presupuesto', 'formacion': formacion, 'source': source},
+      queryParameters: {
+        'presupuesto': '$presupuesto',
+        'formacion': formacion,
+        'source': source,
+        if (fijos.isNotEmpty) 'fijos': fijos.join(','),
+      },
     );
     final response = await http.get(uri).timeout(const Duration(seconds: 20));
     if (response.statusCode != 200) {
