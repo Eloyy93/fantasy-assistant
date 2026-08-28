@@ -321,6 +321,44 @@ class Bargain {
   }
 }
 
+class CaptainCandidate {
+  final String id;
+  final String nombre;
+  final String equipo;
+  final String posicion;
+  final String fotoUrl;
+  final double puntosEsperados;
+  final double score;
+  final String? proximoRival;
+  final int? dificultadRival;
+
+  CaptainCandidate({
+    required this.id,
+    required this.nombre,
+    required this.equipo,
+    required this.posicion,
+    this.fotoUrl = '',
+    required this.puntosEsperados,
+    required this.score,
+    this.proximoRival,
+    this.dificultadRival,
+  });
+
+  factory CaptainCandidate.fromJson(Map<String, dynamic> json) {
+    return CaptainCandidate(
+      id: json['id'] as String,
+      nombre: json['nombre'] as String,
+      equipo: json['equipo'] as String,
+      posicion: json['posicion'] as String,
+      fotoUrl: json['foto_url'] as String? ?? '',
+      puntosEsperados: (json['puntos_esperados'] as num).toDouble(),
+      score: (json['score'] as num).toDouble(),
+      proximoRival: json['proximo_rival'] as String?,
+      dificultadRival: json['dificultad_rival'] as int?,
+    );
+  }
+}
+
 class ApiException implements Exception {
   final String message;
   ApiException(this.message);
@@ -475,6 +513,18 @@ class FantasyApiClient {
     }
     final List<dynamic> data = jsonDecode(utf8.decode(response.bodyBytes));
     return data.map((e) => TeamPlayer.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  Future<List<CaptainCandidate>> getCapitan({required String deviceId, required String source}) async {
+    final uri = Uri.parse('$baseUrl/team/capitan').replace(
+      queryParameters: {'device_id': deviceId, 'source': source},
+    );
+    final response = await http.get(uri).timeout(const Duration(seconds: 25));
+    if (response.statusCode != 200) {
+      throw ApiException('Error ${response.statusCode} al calcular el capitán óptimo');
+    }
+    final List<dynamic> data = jsonDecode(utf8.decode(response.bodyBytes));
+    return data.map((e) => CaptainCandidate.fromJson(e as Map<String, dynamic>)).toList();
   }
 
   Future<void> addToTeam({required String deviceId, required String playerId, String? slot}) async {

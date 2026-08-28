@@ -55,6 +55,18 @@ class BargainOut(BaseModel):
     foto_url: str = ""
 
 
+class CaptainOut(BaseModel):
+    id: str
+    nombre: str
+    equipo: str
+    posicion: str
+    foto_url: str = ""
+    puntos_esperados: float
+    score: float
+    proximo_rival: str | None = None
+    dificultad_rival: int | None = None
+
+
 class SubscriptionIn(BaseModel):
     fcm_token: str
     player_id: str

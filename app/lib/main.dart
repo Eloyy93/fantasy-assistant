@@ -899,6 +899,17 @@ class _TeamScreenState extends State<TeamScreen> {
         title: const Text('Mi plantilla'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.military_tech_rounded),
+            tooltip: 'Capitán óptimo',
+            onPressed: (hayJugadores && _deviceId != null)
+                ? () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => CaptainScreen(api: widget.api, deviceId: _deviceId!, source: _source),
+                      ),
+                    )
+                : null,
+          ),
+          IconButton(
             icon: const Icon(Icons.delete_sweep_rounded),
             tooltip: 'Vaciar plantilla',
             onPressed: hayJugadores ? _vaciarPlantilla : null,
@@ -1285,6 +1296,156 @@ class _RecomendadoCard extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class CaptainScreen extends StatefulWidget {
+  final FantasyApiClient api;
+  final String deviceId;
+  final String source;
+
+  const CaptainScreen({super.key, required this.api, required this.deviceId, required this.source});
+
+  @override
+  State<CaptainScreen> createState() => _CaptainScreenState();
+}
+
+class _CaptainScreenState extends State<CaptainScreen> {
+  List<CaptainCandidate>? _candidatos;
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _cargar();
+  }
+
+  Future<void> _cargar() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final candidatos = await widget.api.getCapitan(deviceId: widget.deviceId, source: widget.source);
+      if (!mounted) return;
+      setState(() => _candidatos = candidatos);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = 'No se pudo calcular el capitán óptimo: $e');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final candidatos = _candidatos ?? [];
+    return Scaffold(
+      appBar: AppBar(title: const Text('Capitán óptimo')),
+      body: RefreshIndicator(
+        onRefresh: _cargar,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+          children: [
+            const Text(
+              'Quién de tu once titular tiene más probabilidad de puntuar alto esta jornada, para el multiplicador de capitán.',
+              style: TextStyle(color: kTextSecondary, fontSize: 13),
+            ),
+            const SizedBox(height: 20),
+            if (_loading)
+              const Padding(padding: EdgeInsets.symmetric(vertical: 24), child: Center(child: CircularProgressIndicator())),
+            if (_error != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+              ),
+            if (!_loading && _error == null && candidatos.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 24),
+                child: Center(
+                  child: Text('Coloca jugadores en el campo para ver la recomendación', style: TextStyle(color: kTextSecondary)),
+                ),
+              ),
+            for (var i = 0; i < candidatos.length; i++) ...[
+              _CaptainCard(candidato: candidatos[i], top: i == 0),
+              const SizedBox(height: 10),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CaptainCard extends StatelessWidget {
+  final CaptainCandidate candidato;
+  final bool top;
+
+  const _CaptainCard({required this.candidato, required this.top});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: kSurfaceColor,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: top ? kMintAccent.withValues(alpha: 0.6) : kBorderColor),
+      ),
+      child: Row(
+        children: [
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              PlayerAvatar(fotoUrl: candidato.fotoUrl, posicion: candidato.posicion),
+              if (top)
+                const Positioned(
+                  top: -6,
+                  left: -6,
+                  child: Icon(Icons.workspace_premium_rounded, color: kMintAccent, size: 18),
+                ),
+            ],
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(candidato.nombre, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 2),
+                Text(
+                  candidato.proximoRival != null ? '${candidato.equipo} · vs ${candidato.proximoRival}' : candidato.equipo,
+                  style: const TextStyle(fontSize: 13, color: kTextSecondary),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                '${candidato.puntosEsperados.toStringAsFixed(1)} pts',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: top ? kMintAccent : Colors.white,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              if (candidato.dificultadRival != null) ...[
+                const SizedBox(height: 2),
+                Text(
+                  'rival ${candidato.dificultadRival}/100',
+                  style: const TextStyle(fontSize: 12, color: kTextTertiary, fontWeight: FontWeight.w600),
+                ),
+              ],
+            ],
+          ),
+        ],
       ),
     );
   }

@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from fantasy_assistant.api.schemas import (
     BargainOut,
+    CaptainOut,
     ChollosPrefIn,
     CompareOut,
     ComparePlayerOut,
@@ -44,7 +45,7 @@ from fantasy_assistant.db.models import (
     TeamPlayer,
 )
 from fantasy_assistant.jobs.sync_data import sync_once
-from fantasy_assistant.modules import bargain_detector, price_predictor
+from fantasy_assistant.modules import bargain_detector, captain_advisor, price_predictor
 from fantasy_assistant.modules.lineup_optimizer import FORMACIONES, LineupError, optimize_lineup
 
 logger = logging.getLogger(__name__)
@@ -466,6 +467,32 @@ def get_team(
         )
 
     return resultado
+
+
+@app.get("/team/capitan", response_model=list[CaptainOut])
+def get_capitan(
+    device_id: str = Query(...),
+    source: str = Query(default=config.fantasy_source),
+    db: Session = Depends(get_db),
+) -> list[CaptainOut]:
+    """Módulo 5 — de los jugadores colocados en el campo (no el
+    banquillo), quién tiene más probabilidad de puntuar alto esta
+    jornada, para elegir el multiplicador de capitán."""
+    candidatos = captain_advisor.recomendar_capitan(db, device_id, source)
+    return [
+        CaptainOut(
+            id=c.player_id,
+            nombre=c.nombre,
+            equipo=c.equipo,
+            posicion=c.posicion,
+            foto_url=c.foto_url,
+            puntos_esperados=c.puntos_esperados,
+            score=c.score,
+            proximo_rival=c.proximo_rival,
+            dificultad_rival=c.dificultad_rival,
+        )
+        for c in candidatos
+    ]
 
 
 @app.get("/team/formacion", response_model=FormationOut)
