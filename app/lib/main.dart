@@ -2420,6 +2420,7 @@ class _LineupScreenState extends State<LineupScreen> {
   bool _aplicando = false;
   String? _error;
   final List<Player> _fijos = [];
+  bool _importandoPlantilla = false;
 
   @override
   void dispose() {
@@ -2445,6 +2446,43 @@ class _LineupScreenState extends State<LineupScreen> {
 
   void _quitarFijo(Player jugador) {
     setState(() => _fijos.removeWhere((p) => p.id == jugador.id));
+  }
+
+  Future<void> _importarPlantilla() async {
+    setState(() => _importandoPlantilla = true);
+    try {
+      final deviceId = await getDeviceId();
+      final resultados = await Future.wait([
+        widget.api.getTeam(deviceId, source: widget.source),
+        widget.api.getFormacion(deviceId: deviceId, source: widget.source),
+      ]);
+      final equipo = resultados[0] as List<TeamPlayer>;
+      final formacion = resultados[1] as String;
+      // Solo el once titular (colocado en el campo) — los del banquillo no
+      // tienen un hueco de formación asociado que respetar.
+      final titulares = equipo.where((j) => j.slot != null).toList();
+      if (titulares.isEmpty) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Tu plantilla de esta fuente aún no tiene jugadores colocados en el campo')),
+        );
+        return;
+      }
+      setState(() {
+        _formacion = formacion;
+        for (final j in titulares) {
+          if (_fijos.any((p) => p.id == j.id)) continue;
+          _fijos.add(
+            Player(id: j.id, source: j.source, nombre: j.nombre, equipo: j.equipo, posicion: j.posicion, precio: j.precio, fotoUrl: j.fotoUrl),
+          );
+        }
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('No se pudo importar la plantilla: $e')));
+    } finally {
+      if (mounted) setState(() => _importandoPlantilla = false);
+    }
   }
 
   Future<void> _calcular() async {
@@ -2532,13 +2570,24 @@ class _LineupScreenState extends State<LineupScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
+            const Text(
+              'Jugadores fijos',
+              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+            ),
+            Text(
+              'El optimizador los da por puestos y solo calcula quién falta.',
+              style: const TextStyle(color: kTextSecondary, fontSize: 12),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 4,
               children: [
-                const Expanded(
-                  child: Text(
-                    'Jugadores fijos',
-                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
-                  ),
+                TextButton.icon(
+                  onPressed: _importandoPlantilla ? null : _importarPlantilla,
+                  icon: _importandoPlantilla
+                      ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2, color: kMintAccent))
+                      : const Icon(Icons.shield_rounded, size: 18),
+                  label: Text(_importandoPlantilla ? 'Importando…' : 'Importar mi plantilla'),
                 ),
                 TextButton.icon(
                   onPressed: _elegirFijo,
@@ -2546,10 +2595,6 @@ class _LineupScreenState extends State<LineupScreen> {
                   label: const Text('Añadir'),
                 ),
               ],
-            ),
-            Text(
-              'El optimizador los da por puestos y solo calcula quién falta.',
-              style: const TextStyle(color: kTextSecondary, fontSize: 12),
             ),
             if (_fijos.isNotEmpty) ...[
               const SizedBox(height: 10),
@@ -2587,6 +2632,11 @@ class _LineupScreenState extends State<LineupScreen> {
             ),
             const SizedBox(height: 14),
             DropdownButtonFormField<String>(
+              // Con `key` distinta por formación, un cambio externo (ej. al
+              // importar la plantilla) fuerza a reconstruir el desplegable
+              // con el nuevo valor — initialValue por sí solo solo cuenta la
+              // primera vez, no en reconstrucciones posteriores.
+              key: ValueKey(_formacion),
               initialValue: _formacion,
               decoration: const InputDecoration(labelText: 'Formación'),
               dropdownColor: kSurfaceHighColor,
