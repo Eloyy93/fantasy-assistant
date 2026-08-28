@@ -452,7 +452,7 @@ class _PlayerSearchScreenState extends State<PlayerSearchScreen> {
               onChanged: _onQueryChanged,
               style: const TextStyle(fontSize: 15),
               decoration: const InputDecoration(
-                hintText: 'Buscar jugador',
+                hintText: 'Buscar jugador o equipo',
                 prefixIcon: Icon(Icons.search_rounded, color: kTextSecondary),
               ),
             ),

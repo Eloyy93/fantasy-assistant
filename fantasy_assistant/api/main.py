@@ -168,7 +168,7 @@ def _normalizar_busqueda(texto: str) -> str:
 
 @app.get("/players", response_model=list[PlayerOut])
 def list_players(
-    q: str | None = Query(default=None, description="Filtro por nombre (contiene, insensible a mayúsculas y acentos)"),
+    q: str | None = Query(default=None, description="Filtro por nombre o equipo (contiene, insensible a mayúsculas y acentos)"),
     source: str = Query(default=config.fantasy_source),
     limit: int = Query(default=50, le=200),
     db: Session = Depends(get_db),
@@ -178,12 +178,17 @@ def list_players(
         return db.execute(stmt.limit(limit)).scalars().all()
 
     # SQLite no tiene una forma nativa de ignorar acentos en LIKE, así que
-    # filtramos en Python sobre el nombre normalizado (sin acentos). El
-    # mercado de una fuente son unos cientos de jugadores, así que traer
-    # todos y filtrar en memoria es barato.
+    # filtramos en Python sobre nombre/equipo normalizados (sin acentos).
+    # El mercado de una fuente son unos cientos de jugadores, así que traer
+    # todos y filtrar en memoria es barato. Busca en nombre O equipo, para
+    # que escribir "Barcelona" enseñe a toda la plantilla del equipo.
     q_normalizada = _normalizar_busqueda(q)
     candidatos = db.execute(stmt).scalars().all()
-    coincidencias = [p for p in candidatos if q_normalizada in _normalizar_busqueda(p.nombre)]
+    coincidencias = [
+        p
+        for p in candidatos
+        if q_normalizada in _normalizar_busqueda(p.nombre) or q_normalizada in _normalizar_busqueda(p.equipo)
+    ]
     return coincidencias[:limit]
 
 
