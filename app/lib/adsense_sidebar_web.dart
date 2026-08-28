@@ -1,4 +1,5 @@
 // ignore_for_file: deprecated_member_use, avoid_web_libraries_in_flutter
+import 'dart:async';
 import 'dart:html' as html;
 import 'dart:ui_web' as ui_web;
 
@@ -25,21 +26,28 @@ bool _registrado = false;
 Widget buildAdsenseSidebar() {
   if (!_registrado) {
     ui_web.platformViewRegistry.registerViewFactory(_viewType, (int viewId) {
+      // Ancho fijo en píxeles (no "100%") — el div del HtmlElementView
+      // puede no tener todavía el tamaño real que le da Flutter en el
+      // primer frame, y AdSense calcula el hueco del anuncio nada más
+      // insertarlo: con "100%" sin padre medido aún, ve un ancho de 0 y
+      // el push() falla ("No slot size for availableWidth=0").
       final contenedor = html.DivElement()
-        ..style.width = '100%'
+        ..style.width = '300px'
         ..style.height = '100%';
 
       final ins = html.Element.tag('ins')
         ..className = 'adsbygoogle'
         ..style.display = 'block'
+        ..style.width = '300px'
         ..setAttribute('data-ad-client', _adClient)
         ..setAttribute('data-ad-slot', _adSlot)
-        ..setAttribute('data-ad-format', 'auto')
-        ..setAttribute('data-full-width-responsive', 'true');
+        ..setAttribute('data-ad-format', 'auto');
       contenedor.append(ins);
 
       final script = html.ScriptElement()..text = '(adsbygoogle = window.adsbygoogle || []).push({});';
-      contenedor.append(script);
+      // Un pequeño margen para que el navegador termine de aplicar el
+      // layout del platform view antes de que AdSense mida el hueco.
+      Timer(const Duration(milliseconds: 300), () => contenedor.append(script));
 
       return contenedor;
     });

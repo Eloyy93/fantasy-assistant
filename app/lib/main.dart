@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
@@ -54,6 +55,16 @@ Future<void> _setupPushNotifications() async {
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  // Sin esto, un error de build en producción (web incluido) se traga en
+  // silencio — al menos queda en la consola del navegador para poder
+  // depurarlo en vez de ver una pantalla en blanco sin pista alguna.
+  FlutterError.onError = (details) {
+    print('[FlutterError] ${details.exceptionAsString()}\n${details.stack}');
+  };
+  PlatformDispatcher.instance.onError = (error, stack) {
+    print('[PlatformDispatcher] $error\n$stack');
+    return true;
+  };
   unawaited(_setupPushNotifications());
   unawaited(initAds());
   unawaited(PurchaseService.instance.init());
@@ -68,7 +79,131 @@ class FantasyAssistantApp extends StatelessWidget {
     return MaterialApp(
       title: 'Master Fantasy',
       theme: fantasyTheme,
-      home: const PlayerSearchScreen(),
+      home: const _RootRouter(),
+    );
+  }
+}
+
+/// Decide entre la app móvil (navegación por pantallas, como Android) y el
+/// shell de escritorio (barra lateral fija + secciones sin recargar) según
+/// el ancho de pantalla — se re-evalúa solo, así que redimensionar la
+/// ventana del navegador cambia de una a otra sin recargar la página.
+class _RootRouter extends StatelessWidget {
+  const _RootRouter();
+
+  @override
+  Widget build(BuildContext context) {
+    return isDesktop(context) ? const DesktopShell() : const PlayerSearchScreen();
+  }
+}
+
+class _DesktopSeccion {
+  final String label;
+  final IconData icon;
+  final Widget Function(FantasyApiClient api) build;
+  const _DesktopSeccion({required this.label, required this.icon, required this.build});
+}
+
+/// Diseño de escritorio "de verdad": barra lateral fija con las secciones
+/// (nada de menú desplegable ni de navegar a pantalla completa por cada
+/// función, como en móvil) + hueco de anuncio a la derecha. Cada sección es
+/// la misma pantalla que usa la app Android, montada una vez dentro de un
+/// IndexedStack para que cambiar de sección no pierda su estado (búsqueda,
+/// filtros...).
+class DesktopShell extends StatefulWidget {
+  const DesktopShell({super.key});
+
+  @override
+  State<DesktopShell> createState() => _DesktopShellState();
+}
+
+class _DesktopShellState extends State<DesktopShell> {
+  final _api = FantasyApiClient();
+  int _seleccion = 0;
+  // Cada sección se monta (y dispara sus llamadas a la API) la primera vez
+  // que se visita, no todas a la vez al abrir la app — montar las 5 de
+  // golpe (búsqueda + plantilla + formación + chollos...) satura el
+  // backend con un pico de peticiones simultáneas al cargar. Una vez
+  // visitada se queda montada (offstage) para no perder su estado al
+  // cambiar de pestaña.
+  final Set<int> _visitadas = {0};
+
+  late final List<_DesktopSeccion> _secciones = [
+    _DesktopSeccion(label: 'Buscar', icon: Icons.search_rounded, build: (api) => const PlayerSearchScreen()),
+    _DesktopSeccion(
+      label: 'Mi plantilla',
+      icon: Icons.shield_rounded,
+      build: (api) => TeamScreen(api: api),
+    ),
+    _DesktopSeccion(
+      label: 'Optimizador',
+      icon: Icons.auto_awesome_rounded,
+      build: (api) => LineupScreen(api: api, source: 'laligafantasy'),
+    ),
+    _DesktopSeccion(
+      label: 'Comparador',
+      icon: Icons.compare_arrows_rounded,
+      build: (api) => CompareScreen(api: api, source: 'laligafantasy'),
+    ),
+    _DesktopSeccion(
+      label: 'Chollos',
+      icon: Icons.local_fire_department_rounded,
+      build: (api) => BargainsScreen(api: api, source: 'laligafantasy'),
+    ),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Row(
+        children: [
+          NavigationRail(
+            extended: true,
+            minExtendedWidth: 220,
+            backgroundColor: kSurfaceColor,
+            selectedIndex: _seleccion,
+            onDestinationSelected: (i) => setState(() {
+              _seleccion = i;
+              _visitadas.add(i);
+            }),
+            leading: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
+              child: Row(
+                children: [
+                  Container(
+                    width: 32,
+                    height: 32,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(color: kMintAccent, borderRadius: BorderRadius.circular(9)),
+                    child: const Text('M', style: TextStyle(color: Colors.black, fontWeight: FontWeight.w900, fontSize: 17)),
+                  ),
+                  const SizedBox(width: 10),
+                  const Text('Master Fantasy', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+                ],
+              ),
+            ),
+            destinations: [
+              for (final seccion in _secciones)
+                NavigationRailDestination(
+                  icon: Icon(seccion.icon),
+                  selectedIcon: Icon(seccion.icon, color: kMintAccent),
+                  label: Text(seccion.label),
+                ),
+            ],
+          ),
+          const VerticalDivider(width: 1, color: kBorderColor),
+          Expanded(
+            child: IndexedStack(
+              index: _seleccion,
+              children: [
+                for (var i = 0; i < _secciones.length; i++)
+                  _visitadas.contains(i) ? _secciones[i].build(_api) : const SizedBox.shrink(),
+              ],
+            ),
+          ),
+          buildAdsenseSidebar(),
+        ],
+      ),
     );
   }
 }
@@ -133,82 +268,87 @@ class _PlayerSearchScreenState extends State<PlayerSearchScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Master Fantasy'),
-        actions: [
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.menu_rounded),
-            tooltip: 'Menú',
-            onSelected: (opcion) {
-              switch (opcion) {
-                case 'plantilla':
-                  Navigator.of(context).push(MaterialPageRoute(builder: (_) => TeamScreen(api: _api)));
-                case 'optimizador':
-                  Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => LineupScreen(api: _api, source: _source)),
-                  );
-                case 'comparar':
-                  Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => CompareScreen(api: _api, source: _source)),
-                  );
-                case 'chollos':
-                  Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => BargainsScreen(api: _api, source: _source)),
-                  );
-                case 'sin_anuncios':
-                  Navigator.of(context).push(MaterialPageRoute(builder: (_) => const NoAdsScreen()));
-              }
-            },
-            itemBuilder: (context) => [
-              const PopupMenuItem(
-                value: 'plantilla',
-                child: ListTile(
-                  leading: Icon(Icons.shield_rounded),
-                  title: Text('Mi plantilla'),
-                  contentPadding: EdgeInsets.zero,
+      // En escritorio la navegación vive en la barra lateral de
+      // DesktopShell — este AppBar (con su menú de móvil) no aplica ahí.
+      appBar: isDesktop(context)
+          ? null
+          : AppBar(
+              title: const Text('Master Fantasy'),
+              actions: [
+                PopupMenuButton<String>(
+                  icon: const Icon(Icons.menu_rounded),
+                  tooltip: 'Menú',
+                  onSelected: (opcion) {
+                    switch (opcion) {
+                      case 'plantilla':
+                        Navigator.of(context).push(MaterialPageRoute(builder: (_) => TeamScreen(api: _api)));
+                      case 'optimizador':
+                        Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => LineupScreen(api: _api, source: _source)),
+                        );
+                      case 'comparar':
+                        Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => CompareScreen(api: _api, source: _source)),
+                        );
+                      case 'chollos':
+                        Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => BargainsScreen(api: _api, source: _source)),
+                        );
+                      case 'sin_anuncios':
+                        Navigator.of(context).push(MaterialPageRoute(builder: (_) => const NoAdsScreen()));
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(
+                      value: 'plantilla',
+                      child: ListTile(
+                        leading: Icon(Icons.shield_rounded),
+                        title: Text('Mi plantilla'),
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'optimizador',
+                      child: ListTile(
+                        leading: Icon(Icons.auto_awesome_rounded),
+                        title: Text('Optimizador de alineación'),
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'comparar',
+                      child: ListTile(
+                        leading: Icon(Icons.compare_arrows_rounded),
+                        title: Text('Comparar jugadores'),
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'chollos',
+                      child: ListTile(
+                        leading: Icon(Icons.local_fire_department_rounded),
+                        title: Text('Chollos'),
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                    ),
+                    // Sin anuncios ni compras en la versión web
+                    // (google_mobile_ads e in_app_purchase son solo
+                    // Android/iOS) — el menú no ofrece algo que no puede
+                    // hacer nada.
+                    if (!kIsWeb)
+                      const PopupMenuItem(
+                        value: 'sin_anuncios',
+                        child: ListTile(
+                          leading: Icon(Icons.block_rounded),
+                          title: Text('Quitar anuncios'),
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                      ),
+                  ],
                 ),
-              ),
-              const PopupMenuItem(
-                value: 'optimizador',
-                child: ListTile(
-                  leading: Icon(Icons.auto_awesome_rounded),
-                  title: Text('Optimizador de alineación'),
-                  contentPadding: EdgeInsets.zero,
-                ),
-              ),
-              const PopupMenuItem(
-                value: 'comparar',
-                child: ListTile(
-                  leading: Icon(Icons.compare_arrows_rounded),
-                  title: Text('Comparar jugadores'),
-                  contentPadding: EdgeInsets.zero,
-                ),
-              ),
-              const PopupMenuItem(
-                value: 'chollos',
-                child: ListTile(
-                  leading: Icon(Icons.local_fire_department_rounded),
-                  title: Text('Chollos'),
-                  contentPadding: EdgeInsets.zero,
-                ),
-              ),
-              // Sin anuncios ni compras en la versión web (google_mobile_ads
-              // e in_app_purchase son solo Android/iOS) — el menú no ofrece
-              // algo que no puede hacer nada.
-              if (!kIsWeb)
-                const PopupMenuItem(
-                  value: 'sin_anuncios',
-                  child: ListTile(
-                    leading: Icon(Icons.block_rounded),
-                    title: Text('Quitar anuncios'),
-                    contentPadding: EdgeInsets.zero,
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(width: 4),
-        ],
-      ),
+                const SizedBox(width: 4),
+              ],
+            ),
       body: _buildBody(context),
     );
   }
@@ -343,14 +483,7 @@ class _PlayerSearchScreenState extends State<PlayerSearchScreen> {
       ],
     );
 
-    if (!desktop) return contenido;
-
-    return Row(
-      children: [
-        Expanded(child: contenido),
-        buildAdsenseSidebar(),
-      ],
-    );
+    return contenido;
   }
 }
 
