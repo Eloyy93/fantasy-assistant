@@ -170,12 +170,9 @@ class _DesktopShellState extends State<DesktopShell> {
               padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
               child: Row(
                 children: [
-                  Container(
-                    width: 32,
-                    height: 32,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(color: kMintAccent, borderRadius: BorderRadius.circular(9)),
-                    child: const Text('M', style: TextStyle(color: Colors.black, fontWeight: FontWeight.w900, fontSize: 17)),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(9),
+                    child: Image.asset('assets/icon/app_icon.png', width: 34, height: 34, fit: BoxFit.cover),
                   ),
                   const SizedBox(width: 10),
                   const Text('Master Fantasy', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
@@ -273,7 +270,17 @@ class _PlayerSearchScreenState extends State<PlayerSearchScreen> {
       appBar: isDesktop(context)
           ? null
           : AppBar(
-              title: const Text('Master Fantasy'),
+              title: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.asset('assets/icon/app_icon.png', width: 28, height: 28, fit: BoxFit.cover),
+                  ),
+                  const SizedBox(width: 10),
+                  const Text('Master Fantasy'),
+                ],
+              ),
               actions: [
                 PopupMenuButton<String>(
                   icon: const Icon(Icons.menu_rounded),
