@@ -138,7 +138,7 @@ class _ChipAvatar extends StatelessWidget {
       ),
       child: ClipOval(
         child: Image.network(
-          fotoUrl,
+          webSafePhotoUrl(fotoUrl),
           fit: BoxFit.cover,
           alignment: Alignment.topCenter,
           errorBuilder: (_, _, _) => _fallback(),

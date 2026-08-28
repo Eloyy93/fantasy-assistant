@@ -8,10 +8,13 @@ from __future__ import annotations
 import datetime as dt
 import logging
 import unicodedata
+from urllib.parse import urlparse
 
+import requests
 from apscheduler.schedulers.background import BackgroundScheduler
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -120,6 +123,41 @@ def health(db: Session = Depends(get_db)) -> dict:
         for source_name in SOURCES
     }
     return {"status": "ok", "jugadores_por_fuente": jugadores_por_fuente}
+
+
+# CDNs de foto conocidos de las fuentes soportadas (ver PlayerRecord.foto_url).
+# El proxy solo reenvía estos hosts para que no se convierta en un proxy
+# HTTP abierto a cualquier URL.
+_PHOTO_HOSTS_PERMITIDOS = {"cdn.biwenger.com", "media.futbolfantasy.com"}
+
+
+@app.get("/proxy/photo")
+def proxy_photo(url: str = Query(...)) -> Response:
+    """Reenvía una foto de jugador con cabeceras propias (incluido CORS,
+    ya abierto a nivel de app vía CORSMiddleware). La versión web no puede
+    cargar estas fotos directamente con Image.network: los CDNs de
+    Biwenger/LaLiga Fantasy no llevan cabeceras CORS, así que el navegador
+    bloquea la petición — la app Android no tiene este problema (peticiones
+    nativas, sin same-origin policy)."""
+    host = urlparse(url).hostname
+    if host not in _PHOTO_HOSTS_PERMITIDOS:
+        raise HTTPException(status_code=400, detail="Host de imagen no permitido")
+
+    try:
+        # Sin User-Agent de navegador, cdn.biwenger.com devuelve 403 (bloquea
+        # el user-agent por defecto de requests).
+        respuesta = requests.get(
+            url, timeout=8, headers={"User-Agent": "Mozilla/5.0 (compatible; MasterFantasyBot/1.0)"}
+        )
+        respuesta.raise_for_status()
+    except requests.RequestException as e:
+        raise HTTPException(status_code=502, detail=f"No se pudo obtener la imagen: {e}") from e
+
+    return Response(
+        content=respuesta.content,
+        media_type=respuesta.headers.get("Content-Type", "image/png"),
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
 
 
 def _normalizar_busqueda(texto: str) -> str:

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'api_client.dart';
+
 /// Tema oscuro con acento verde menta y tipografía Inter, inspirado en
 /// apps de datos de fantasy football: fondo casi negro con un puntito de
 /// azul, tarjetas con borde sutil en vez de sombra plana, jerarquía
@@ -179,7 +181,7 @@ class PlayerAvatar extends StatelessWidget {
         height: size,
         color: color.withValues(alpha: 0.16),
         child: Image.network(
-          fotoUrl,
+          webSafePhotoUrl(fotoUrl),
           fit: BoxFit.cover,
           alignment: Alignment.topCenter,
           errorBuilder: (_, _, _) => PositionBadge(posicion: posicion, size: size),

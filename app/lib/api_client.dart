@@ -1,8 +1,18 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 /// URL base del backend Fantasy Assistant, ya desplegado en Railway.
 const String kApiBaseUrl = 'https://fantasy-assistant-production-d8fd.up.railway.app';
+
+/// En web, los CDN de fotos de Biwenger/LaLiga Fantasy no llevan cabeceras
+/// CORS, así que el navegador bloquea Image.network directo — hay que
+/// pasar por el proxy propio del backend (que sí las añade). En Android
+/// no hace falta (peticiones nativas, sin same-origin policy).
+String webSafePhotoUrl(String fotoUrl) {
+  if (fotoUrl.isEmpty || !kIsWeb) return fotoUrl;
+  return '$kApiBaseUrl/proxy/photo?url=${Uri.encodeComponent(fotoUrl)}';
+}
 
 class Player {
   final String id;
