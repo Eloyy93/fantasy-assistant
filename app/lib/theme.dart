@@ -98,6 +98,16 @@ final fantasyTheme = ThemeData(
       shape: WidgetStatePropertyAll(RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
     ),
   ),
+  popupMenuTheme: PopupMenuThemeData(
+    color: kSurfaceHighColor,
+    surfaceTintColor: Colors.transparent,
+    elevation: 0,
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(18),
+      side: const BorderSide(color: kBorderColor),
+    ),
+    textStyle: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w500),
+  ),
 );
 
 /// Color por posición: dorado=portero, azul=defensa, menta=medio, rojo=delantero.
