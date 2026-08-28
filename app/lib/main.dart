@@ -5,12 +5,14 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
+import 'adsense_sidebar.dart';
 import 'ads_service.dart';
 import 'api_client.dart';
 import 'device_id.dart';
 import 'history_charts.dart';
 import 'pitch_view.dart';
 import 'purchase_service.dart';
+import 'responsive.dart';
 import 'theme.dart';
 
 /// Token FCM de este dispositivo, disponible tras arrancar la app. Nulo
@@ -207,13 +209,96 @@ class _PlayerSearchScreenState extends State<PlayerSearchScreen> {
           const SizedBox(width: 4),
         ],
       ),
-      body: Column(
-        children: [
-          Padding(
+      body: _buildBody(context),
+    );
+  }
+
+  Widget _buildBody(BuildContext context) {
+    final desktop = isDesktop(context);
+
+    Widget resultados;
+    if (!_loading && _error == null && _players.isEmpty) {
+      resultados = Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                _source == 'laligafantasy' ? Icons.cloud_off_rounded : Icons.search_off_rounded,
+                size: 40,
+                color: kTextTertiary,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                _source == 'laligafantasy'
+                    ? 'La API oficial de LaLiga Fantasy está caída ahora mismo.'
+                    : 'Sin jugadores disponibles en esta fuente ahora mismo.',
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: kTextSecondary),
+              ),
+              if (_source == 'laligafantasy') ...[
+                const SizedBox(height: 6),
+                const Text(
+                  'No es un fallo de la app: se sincroniza sola en\ncuanto LaLiga recupere el servicio.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: kTextTertiary, fontSize: 12),
+                ),
+              ],
+            ],
+          ),
+        ),
+      );
+    } else if (desktop) {
+      // En escritorio hay sitio de sobra para varias columnas — una lista
+      // de una sola columna estirada de borde a borde se vería como la
+      // versión móvil simplemente ensanchada.
+      resultados = GridView.builder(
+        padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+          maxCrossAxisExtent: 420,
+          mainAxisExtent: 76,
+          crossAxisSpacing: 12,
+          mainAxisSpacing: 10,
+        ),
+        itemCount: _players.length,
+        itemBuilder: (context, index) {
+          final player = _players[index];
+          return _PlayerCard(
+            player: player,
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => PrediccionScreen(player: player, api: _api)),
+            ),
+          );
+        },
+      );
+    } else {
+      resultados = ListView.separated(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+        itemCount: _players.length,
+        separatorBuilder: (_, _) => const SizedBox(height: 10),
+        itemBuilder: (context, index) {
+          final player = _players[index];
+          return _PlayerCard(
+            player: player,
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => PrediccionScreen(player: player, api: _api)),
+            ),
+          );
+        },
+      );
+    }
+
+    final contenido = Column(
+      children: [
+        DesktopContainer(
+          child: Padding(
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
             child: _SourceToggle(source: _source, onChanged: _onSourceChanged),
           ),
-          Padding(
+        ),
+        DesktopContainer(
+          child: Padding(
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
             child: TextField(
               controller: _controller,
@@ -225,82 +310,46 @@ class _PlayerSearchScreenState extends State<PlayerSearchScreen> {
               ),
             ),
           ),
-          SizedBox(
-            height: 3,
-            child: _loading
-                ? const LinearProgressIndicator(minHeight: 3, backgroundColor: Colors.transparent)
-                : null,
-          ),
-          if (_error != null)
-            Padding(
+        ),
+        SizedBox(
+          height: 3,
+          child: _loading
+              ? const LinearProgressIndicator(minHeight: 3, backgroundColor: Colors.transparent)
+              : null,
+        ),
+        if (_error != null)
+          DesktopContainer(
+            child: Padding(
               padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
               child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
             ),
-          if (!_loading && _error == null && _players.isEmpty)
-            Expanded(
-              child: Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(32),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        _source == 'laligafantasy' ? Icons.cloud_off_rounded : Icons.search_off_rounded,
-                        size: 40,
-                        color: kTextTertiary,
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        _source == 'laligafantasy'
-                            ? 'La API oficial de LaLiga Fantasy está caída ahora mismo.'
-                            : 'Sin jugadores disponibles en esta fuente ahora mismo.',
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(color: kTextSecondary),
-                      ),
-                      if (_source == 'laligafantasy') ...[
-                        const SizedBox(height: 6),
-                        const Text(
-                          'No es un fallo de la app: se sincroniza sola en\ncuanto LaLiga recupere el servicio.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(color: kTextTertiary, fontSize: 12),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ),
-            )
-          else
-            Expanded(
-              child: ListView.separated(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-                itemCount: _players.length,
-                separatorBuilder: (_, _) => const SizedBox(height: 10),
-                itemBuilder: (context, index) {
-                  final player = _players[index];
-                  return _PlayerCard(
-                    player: player,
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => PrediccionScreen(player: player, api: _api)),
-                    ),
-                  );
-                },
-              ),
-            ),
-          // El banner va aquí, como un hijo más del Column — puesto en
-          // Scaffold.bottomNavigationBar (donde parece "natural" un banner
-          // fijo abajo) dejaba el resto de la pantalla en blanco: verificado
-          // en emulador que esa combinación concreta (platform view de
-          // AdMob + slot bottomNavigationBar) rompe el compositing del resto
-          // del árbol de widgets. Aquí, como hijo normal del body, funciona.
+          ),
+        Expanded(child: desktop ? resultados : DesktopContainer(child: resultados)),
+        // El banner de AdMob va aquí, como un hijo más del Column — puesto
+        // en Scaffold.bottomNavigationBar (donde parece "natural" un banner
+        // fijo abajo) dejaba el resto de la pantalla en blanco: verificado
+        // en emulador que esa combinación concreta (platform view de
+        // AdMob + slot bottomNavigationBar) rompe el compositing del resto
+        // del árbol de widgets. Aquí, como hijo normal del body, funciona.
+        // En escritorio no se muestra: el anuncio va en la barra lateral
+        // (buildAdsenseSidebar), un banner de 320x50 se perdería ahí.
+        if (!desktop)
           ValueListenableBuilder<bool>(
             valueListenable: PurchaseService.instance.adsRemoved,
             builder: (context, sinAnuncios, _) => sinAnuncios
                 ? const SizedBox.shrink()
                 : const SafeArea(top: false, child: Center(child: BannerAdBar())),
           ),
-        ],
-      ),
+      ],
+    );
+
+    if (!desktop) return contenido;
+
+    return Row(
+      children: [
+        Expanded(child: contenido),
+        buildAdsenseSidebar(),
+      ],
     );
   }
 }
@@ -380,7 +429,7 @@ class _CompareScreenState extends State<CompareScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Comparar jugadores')),
-      body: ListView(
+      body: DesktopContainer(child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
         children: [
           _SourceToggle(source: _source, onChanged: _onSourceChanged),
@@ -406,7 +455,7 @@ class _CompareScreenState extends State<CompareScreen> {
             ),
           if (_resultado != null) _CompareTable(a: _resultado!.$1, b: _resultado!.$2),
         ],
-      ),
+      )),
     );
   }
 }
@@ -927,7 +976,7 @@ class _TeamScreenState extends State<TeamScreen> {
       ),
       body: RefreshIndicator(
         onRefresh: _cargar,
-        child: _buildBody(context),
+        child: DesktopContainer(child: _buildBody(context)),
       ),
     );
   }
@@ -1356,7 +1405,7 @@ class _CaptainScreenState extends State<CaptainScreen> {
       appBar: AppBar(title: const Text('Capitán óptimo')),
       body: RefreshIndicator(
         onRefresh: _cargar,
-        child: ListView(
+        child: DesktopContainer(child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
           children: [
             const Text(
@@ -1383,7 +1432,7 @@ class _CaptainScreenState extends State<CaptainScreen> {
               const SizedBox(height: 10),
             ],
           ],
-        ),
+        )),
       ),
     );
   }
@@ -1544,7 +1593,7 @@ class _BargainsScreenState extends State<BargainsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Chollos')),
-      body: ListView(
+      body: DesktopContainer(child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
         children: [
           Text(
@@ -1588,7 +1637,7 @@ class _BargainsScreenState extends State<BargainsScreen> {
             const SizedBox(height: 10),
           ],
         ],
-      ),
+      )),
     );
   }
 }
@@ -2203,7 +2252,7 @@ class _LineupScreenState extends State<LineupScreen> {
       appBar: AppBar(
         title: Text('Optimizador · ${widget.source == 'biwenger' ? 'Biwenger' : 'LaLiga Fantasy'}'),
       ),
-      body: ListView(
+      body: DesktopContainer(child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
         children: [
           Card(
@@ -2319,7 +2368,7 @@ class _LineupScreenState extends State<LineupScreen> {
             ),
           ],
         ],
-      ),
+      )),
     );
   }
 }
