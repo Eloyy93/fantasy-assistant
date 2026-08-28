@@ -263,11 +263,15 @@ def register_device(payload: DeviceRegisterIn, db: Session = Depends(get_db)) ->
 
 @app.put("/devices/chollos", status_code=204)
 def set_chollos_pref(payload: ChollosPrefIn, db: Session = Depends(get_db)) -> None:
+    # Upsert en vez de exigir un registro previo: el registro inicial en
+    # POST /devices puede no haber llegado a tiempo (sin red al arrancar
+    # la app) y no tiene sentido bloquear esta preferencia por eso.
     device = db.execute(
         select(DeviceRegistration).where(DeviceRegistration.fcm_token == payload.fcm_token)
     ).scalar_one_or_none()
     if not device:
-        raise HTTPException(status_code=404, detail="Dispositivo no registrado")
+        device = DeviceRegistration(fcm_token=payload.fcm_token)
+        db.add(device)
     device.notificar_chollos = payload.activar
     db.commit()
 
