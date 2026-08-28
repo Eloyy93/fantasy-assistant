@@ -354,11 +354,17 @@ def add_to_team(payload: TeamMemberIn, db: Session = Depends(get_db)) -> dict:
         raise HTTPException(status_code=404, detail=f"Jugador '{payload.player_id}' no encontrado")
 
     if payload.slot:
-        # Si el hueco ya lo ocupaba otro jugador, no lo borramos de la
-        # plantilla — lo mandamos al banquillo (slot=None), al estilo
-        # Futbin: "colocar aquí" nunca hace desaparecer a nadie.
+        # Si el hueco ya lo ocupaba otro jugador DE LA MISMA FUENTE, no lo
+        # borramos de la plantilla — lo mandamos al banquillo (slot=None),
+        # al estilo Futbin: "colocar aquí" nunca hace desaparecer a nadie.
+        # Filtrar por source es imprescindible: los nombres de slot
+        # ("DEF2", "MED1"...) se repiten entre Biwenger y LaLiga Fantasy.
         ocupante = db.execute(
-            select(TeamPlayer).where(TeamPlayer.device_id == payload.device_id, TeamPlayer.slot == payload.slot)
+            select(TeamPlayer).where(
+                TeamPlayer.device_id == payload.device_id,
+                TeamPlayer.slot == payload.slot,
+                TeamPlayer.source == player.source,
+            )
         ).scalar_one_or_none()
         if ocupante and ocupante.player_id != payload.player_id:
             ocupante.slot = None
@@ -369,7 +375,7 @@ def add_to_team(payload: TeamMemberIn, db: Session = Depends(get_db)) -> dict:
     if existente:
         existente.slot = payload.slot
     else:
-        db.add(TeamPlayer(device_id=payload.device_id, player_id=payload.player_id, slot=payload.slot))
+        db.add(TeamPlayer(device_id=payload.device_id, player_id=payload.player_id, source=player.source, slot=payload.slot))
     db.commit()
     return {"status": "añadido"}
 

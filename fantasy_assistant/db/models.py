@@ -110,13 +110,22 @@ class TeamPlayer(Base):
     `slot` es la posición exacta dentro de la formación elegida (ej.
     "DEF2"), al estilo Futbin/Ultimate Team — null si el jugador está en la
     plantilla pero no colocado en el campo (añadido antes de esta función,
-    o quitado de su hueco al cambiar de formación)."""
+    o quitado de su hueco al cambiar de formación).
+
+    `source` es un duplicado de `PlayerRecord.source` (evita un join solo
+    para saber la fuente) y, sobre todo, scoping: los nombres de slot
+    ("DEF2", "MED1"...) son los mismos en Biwenger y LaLiga Fantasy, así
+    que sin esta columna en el UNIQUE/las consultas, colocar un jugador en
+    "MED1" de una fuente detectaba como "ocupante" al jugador de la OTRA
+    fuente en ese mismo slot y lo mandaba al banquillo — visto en
+    producción como "el jugador desaparece" al usar ambas fuentes."""
 
     __tablename__ = "team_players"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     device_id: Mapped[str] = mapped_column(String, index=True)
     player_id: Mapped[str] = mapped_column(ForeignKey("players.id"), index=True)
+    source: Mapped[str] = mapped_column(String, index=True)
     slot: Mapped[str | None] = mapped_column(String, nullable=True)
 
     __table_args__ = (
@@ -124,7 +133,9 @@ class TeamPlayer(Base):
         # SQLite trata cada NULL como distinto en un UNIQUE, así que varios
         # jugadores sin colocar (slot=NULL) del mismo device_id conviven sin
         # problema — el UNIQUE solo se aplica de verdad entre huecos reales.
-        UniqueConstraint("device_id", "slot", name="uq_team_device_slot"),
+        # Incluye `source` para que el mismo nombre de slot en fuentes
+        # distintas no choque (ver docstring de la clase).
+        UniqueConstraint("device_id", "slot", "source", name="uq_team_device_slot_source"),
     )
 
 
