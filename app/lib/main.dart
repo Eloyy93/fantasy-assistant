@@ -78,7 +78,7 @@ class _PlayerSearchScreenState extends State<PlayerSearchScreen> {
   final _controller = TextEditingController();
   Timer? _debounce;
 
-  String _source = 'biwenger';
+  String _source = 'laligafantasy';
   List<Player> _players = [];
   bool _loading = false;
   String? _error;
@@ -660,7 +660,7 @@ class TeamScreen extends StatefulWidget {
 
 class _TeamScreenState extends State<TeamScreen> {
   String? _deviceId;
-  String _source = 'biwenger';
+  String _source = 'laligafantasy';
   String _formacion = '4-3-3';
   List<TeamPlayer>? _jugadores;
   String? _error;
@@ -1652,8 +1652,8 @@ class _SourceToggle extends StatelessWidget {
       ),
       child: Row(
         children: [
-          _segment(context, 'biwenger', 'Biwenger', 'assets/logos/biwenger.svg'),
           _segment(context, 'laligafantasy', 'LaLiga Fantasy', 'assets/logos/laligafantasy.png'),
+          _segment(context, 'biwenger', 'Biwenger', 'assets/logos/biwenger.svg'),
         ],
       ),
     );
