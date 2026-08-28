@@ -38,6 +38,23 @@ class DeviceRegisterIn(BaseModel):
     user_id: str | None = None
 
 
+class ChollosPrefIn(BaseModel):
+    fcm_token: str
+    activar: bool
+
+
+class BargainOut(BaseModel):
+    id: str
+    nombre: str
+    equipo: str
+    posicion: str
+    precio: int
+    puntos_esperados: float
+    ratio: float
+    zscore: float
+    foto_url: str = ""
+
+
 class SubscriptionIn(BaseModel):
     fcm_token: str
     player_id: str

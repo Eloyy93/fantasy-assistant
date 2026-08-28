@@ -18,8 +18,15 @@ from fantasy_assistant.config import config
 from fantasy_assistant.datasources import get_data_source
 from fantasy_assistant.datasources.base import FantasyDataSource, Player
 from fantasy_assistant.db.database import get_session, init_db
-from fantasy_assistant.db.models import DeviceRegistration, DeviceSubscription, PlayerRecord, PointsHistory, PriceHistory
-from fantasy_assistant.modules import alerts
+from fantasy_assistant.db.models import (
+    BargainState,
+    DeviceRegistration,
+    DeviceSubscription,
+    PlayerRecord,
+    PointsHistory,
+    PriceHistory,
+)
+from fantasy_assistant.modules import alerts, bargain_detector
 from fantasy_assistant.notifications import fcm
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -112,6 +119,10 @@ def sync_once(source: FantasyDataSource | None = None) -> int:
         with get_session() as session:
             _send_alerts(session, disparadas)
 
+    if players:
+        with get_session() as session:
+            _detectar_y_notificar_chollos(session, players[0].source)
+
     fuente = players[0].source if players else config.fantasy_source
     logger.info("Sincronizados %d jugadores (fuente=%s)", len(players), fuente)
     return len(players)
@@ -138,6 +149,59 @@ def _send_alerts(session, alertas_disparadas: list[alerts.Alert]) -> None:
 
     if enviadas:
         logger.info("%d/%d alertas tenían al menos un dispositivo suscrito", enviadas, len(alertas_disparadas))
+
+
+def _detectar_y_notificar_chollos(session, source: str) -> None:
+    """Módulo 4 — detecta chollos (ratio puntos/precio anómalo para su
+    posición) y notifica solo los que *acaban de convertirse* en chollo,
+    a los dispositivos que hayan activado ese aviso (independiente de las
+    suscripciones por jugador — el punto de un chollo es descubrir a
+    alguien que aún no seguías)."""
+    chollos_actuales = bargain_detector.detectar_chollos(session, source)
+    ids_actuales = {c.player_id for c in chollos_actuales}
+
+    estados_previos = {
+        s.player_id: s.es_chollo
+        for s in session.execute(select(BargainState)).scalars().all()
+    }
+
+    nuevos = [c for c in chollos_actuales if not estados_previos.get(c.player_id, False)]
+
+    # Actualiza el estado de TODOS los que aparecieron esta vez (nuevos y
+    # los que ya lo eran) y de los que dejaron de serlo, para que la
+    # próxima sincronización sepa distinguir "sigue siendo chollo" de
+    # "chollo nuevo".
+    for player_id, era_chollo in estados_previos.items():
+        if era_chollo and player_id not in ids_actuales:
+            session.merge(BargainState(player_id=player_id, es_chollo=False))
+    for chollo in chollos_actuales:
+        session.merge(BargainState(player_id=chollo.player_id, es_chollo=True))
+    session.commit()
+
+    if not nuevos:
+        return
+
+    tokens = session.execute(
+        select(DeviceRegistration.fcm_token).where(DeviceRegistration.notificar_chollos.is_(True))
+    ).scalars().all()
+    if not tokens:
+        logger.info("%d chollo(s) nuevo(s) en %s, pero nadie tiene activadas las notificaciones", len(nuevos), source)
+        return
+
+    alertas_chollo = [
+        alerts.Alert(
+            player_id=c.player_id,
+            mensaje=f"Chollo: {c.nombre} ({c.equipo}, {c.posicion}) — {c.puntos_esperados} pts esperados por solo {c.precio / 1_000_000:.2f} M€",
+        )
+        for c in nuevos
+    ]
+    invalid_tokens = fcm.send_alerts(alertas_chollo, list(tokens))
+    if invalid_tokens:
+        session.execute(DeviceRegistration.__table__.delete().where(DeviceRegistration.fcm_token.in_(invalid_tokens)))
+        session.execute(DeviceSubscription.__table__.delete().where(DeviceSubscription.fcm_token.in_(invalid_tokens)))
+        session.commit()
+
+    logger.info("%d chollo(s) nuevo(s) en %s, notificados a %d dispositivos", len(nuevos), source, len(tokens))
 
 
 def _upsert_price_snapshot(session, player_id: str, source: str, fecha: dt.date, precio: int) -> None:

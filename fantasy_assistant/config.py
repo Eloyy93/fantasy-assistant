@@ -41,6 +41,14 @@ class Config:
         default_factory=lambda: _float_env("PRICE_CHANGE_ALERT_THRESHOLD", 0.03)
     )
 
+    # Detector de chollos: cuántas desviaciones típicas por encima de la
+    # media de su posición tiene que estar el ratio puntos/precio de un
+    # jugador para considerarlo un chollo. 1.5 es "notablemente por encima
+    # de lo normal" sin ser tan estricto que casi nunca salte nada.
+    bargain_zscore_threshold: float = field(
+        default_factory=lambda: _float_env("BARGAIN_ZSCORE_THRESHOLD", 1.5)
+    )
+
     # Ruta a la clave de cuenta de servicio de Firebase (JSON), para enviar notificaciones push
     firebase_credentials_path: str = field(default_factory=lambda: os.getenv("FIREBASE_CREDENTIALS_PATH", ""))
     # Alternativa: el JSON completo de la cuenta de servicio como string (más cómodo en Railway)

@@ -144,6 +144,10 @@ class _PlayerSearchScreenState extends State<PlayerSearchScreen> {
                   Navigator.of(context).push(
                     MaterialPageRoute(builder: (_) => CompareScreen(api: _api, source: _source)),
                   );
+                case 'chollos':
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => BargainsScreen(api: _api, source: _source)),
+                  );
                 case 'sin_anuncios':
                   Navigator.of(context).push(MaterialPageRoute(builder: (_) => const NoAdsScreen()));
               }
@@ -170,6 +174,14 @@ class _PlayerSearchScreenState extends State<PlayerSearchScreen> {
                 child: ListTile(
                   leading: Icon(Icons.compare_arrows_rounded),
                   title: Text('Comparar jugadores'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+              PopupMenuItem(
+                value: 'chollos',
+                child: ListTile(
+                  leading: Icon(Icons.local_fire_department_rounded),
+                  title: Text('Chollos'),
                   contentPadding: EdgeInsets.zero,
                 ),
               ),
@@ -1273,6 +1285,190 @@ class _RecomendadoCard extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class BargainsScreen extends StatefulWidget {
+  final FantasyApiClient api;
+  final String source;
+
+  const BargainsScreen({super.key, required this.api, required this.source});
+
+  @override
+  State<BargainsScreen> createState() => _BargainsScreenState();
+}
+
+class _BargainsScreenState extends State<BargainsScreen> {
+  late String _source = widget.source;
+  List<Bargain> _chollos = [];
+  bool _loading = true;
+  String? _error;
+  bool _notificar = false;
+  bool _loadingPref = currentFcmToken != null;
+
+  @override
+  void initState() {
+    super.initState();
+    _cargar();
+    _cargarPreferencia();
+  }
+
+  void _onSourceChanged(String source) {
+    setState(() => _source = source);
+    _cargar();
+  }
+
+  Future<void> _cargar() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final chollos = await widget.api.getBargains(source: _source);
+      if (!mounted) return;
+      setState(() => _chollos = chollos);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = 'No se pudieron cargar los chollos: $e');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _cargarPreferencia() async {
+    final token = currentFcmToken;
+    if (token == null) return;
+    try {
+      final activado = await widget.api.getChollosPref(token);
+      if (!mounted) return;
+      setState(() => _notificar = activado);
+    } catch (_) {
+      // Sin red al abrir la pantalla: se deja el interruptor en su valor
+      // por defecto, el usuario puede reintentar tocándolo.
+    } finally {
+      if (mounted) setState(() => _loadingPref = false);
+    }
+  }
+
+  Future<void> _cambiarPreferencia(bool activar) async {
+    final token = currentFcmToken;
+    if (token == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Todavía no se ha podido registrar este dispositivo para notificaciones')),
+      );
+      return;
+    }
+    setState(() => _notificar = activar);
+    try {
+      await widget.api.setChollosPref(fcmToken: token, activar: activar);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _notificar = !activar);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('No se pudo guardar: $e')));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Chollos')),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+        children: [
+          Text(
+            'Jugadores cuya relación puntos/precio destaca frente a los demás de su posición.',
+            style: const TextStyle(color: kTextSecondary, fontSize: 13),
+          ),
+          const SizedBox(height: 16),
+          _SourceToggle(source: _source, onChanged: _onSourceChanged),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            decoration: BoxDecoration(
+              color: kSurfaceColor,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: kBorderColor),
+            ),
+            child: SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              value: _notificar,
+              onChanged: _loadingPref ? null : _cambiarPreferencia,
+              activeThumbColor: kMintAccent,
+              title: const Text('Avisarme de chollos nuevos', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+              subtitle: const Text('Notificación cuando aparezca un jugador infravalorado', style: TextStyle(fontSize: 12, color: kTextSecondary)),
+            ),
+          ),
+          const SizedBox(height: 20),
+          if (_loading)
+            const Padding(padding: EdgeInsets.symmetric(vertical: 24), child: Center(child: CircularProgressIndicator())),
+          if (_error != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+            ),
+          if (!_loading && _error == null && _chollos.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 24),
+              child: Center(child: Text('No hay chollos claros ahora mismo', style: TextStyle(color: kTextSecondary))),
+            ),
+          for (final chollo in _chollos) ...[
+            _BargainCard(chollo: chollo),
+            const SizedBox(height: 10),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _BargainCard extends StatelessWidget {
+  final Bargain chollo;
+
+  const _BargainCard({required this.chollo});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: kSurfaceColor,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: kBorderColor),
+      ),
+      child: Row(
+        children: [
+          PlayerAvatar(fotoUrl: chollo.fotoUrl, posicion: chollo.posicion),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(chollo.nombre, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 2),
+                Text(
+                  '${chollo.equipo} · ${(chollo.precio / 1000000).toStringAsFixed(2)} M€',
+                  style: const TextStyle(fontSize: 13, color: kTextSecondary),
+                ),
+              ],
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                '${chollo.puntosEsperados.toStringAsFixed(1)} pts',
+                style: const TextStyle(fontSize: 13, color: kMintAccent, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                'z ${chollo.zscore.toStringAsFixed(1)}',
+                style: const TextStyle(fontSize: 12, color: kTextTertiary, fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

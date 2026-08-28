@@ -15,6 +15,8 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from fantasy_assistant.api.schemas import (
+    BargainOut,
+    ChollosPrefIn,
     CompareOut,
     ComparePlayerOut,
     DeviceRegisterIn,
@@ -42,7 +44,7 @@ from fantasy_assistant.db.models import (
     TeamPlayer,
 )
 from fantasy_assistant.jobs.sync_data import sync_once
-from fantasy_assistant.modules import price_predictor
+from fantasy_assistant.modules import bargain_detector, price_predictor
 from fantasy_assistant.modules.lineup_optimizer import FORMACIONES, LineupError, optimize_lineup
 
 logger = logging.getLogger(__name__)
@@ -257,6 +259,51 @@ def register_device(payload: DeviceRegisterIn, db: Session = Depends(get_db)) ->
         db.add(DeviceRegistration(fcm_token=payload.fcm_token, user_id=payload.user_id))
     db.commit()
     return {"status": "registrado"}
+
+
+@app.put("/devices/chollos", status_code=204)
+def set_chollos_pref(payload: ChollosPrefIn, db: Session = Depends(get_db)) -> None:
+    device = db.execute(
+        select(DeviceRegistration).where(DeviceRegistration.fcm_token == payload.fcm_token)
+    ).scalar_one_or_none()
+    if not device:
+        raise HTTPException(status_code=404, detail="Dispositivo no registrado")
+    device.notificar_chollos = payload.activar
+    db.commit()
+
+
+@app.get("/devices/chollos")
+def get_chollos_pref(fcm_token: str = Query(...), db: Session = Depends(get_db)) -> dict:
+    device = db.execute(
+        select(DeviceRegistration).where(DeviceRegistration.fcm_token == fcm_token)
+    ).scalar_one_or_none()
+    return {"activado": bool(device.notificar_chollos) if device else False}
+
+
+@app.get("/bargains", response_model=list[BargainOut])
+def get_bargains(
+    source: str = Query(default=config.fantasy_source),
+    limit: int = Query(default=15, le=50),
+    db: Session = Depends(get_db),
+) -> list[BargainOut]:
+    chollos = bargain_detector.detectar_chollos(db, source, limit=limit)
+    resultado = []
+    for c in chollos:
+        player = db.get(PlayerRecord, c.player_id)
+        resultado.append(
+            BargainOut(
+                id=c.player_id,
+                nombre=c.nombre,
+                equipo=c.equipo,
+                posicion=c.posicion,
+                precio=c.precio,
+                puntos_esperados=c.puntos_esperados,
+                ratio=c.ratio,
+                zscore=c.zscore,
+                foto_url=player.foto_url if player else "",
+            )
+        )
+    return resultado
 
 
 @app.post("/subscriptions", status_code=201)

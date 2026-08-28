@@ -283,6 +283,44 @@ class ComparePlayer {
   }
 }
 
+class Bargain {
+  final String id;
+  final String nombre;
+  final String equipo;
+  final String posicion;
+  final int precio;
+  final double puntosEsperados;
+  final double ratio;
+  final double zscore;
+  final String fotoUrl;
+
+  Bargain({
+    required this.id,
+    required this.nombre,
+    required this.equipo,
+    required this.posicion,
+    required this.precio,
+    required this.puntosEsperados,
+    required this.ratio,
+    required this.zscore,
+    this.fotoUrl = '',
+  });
+
+  factory Bargain.fromJson(Map<String, dynamic> json) {
+    return Bargain(
+      id: json['id'] as String,
+      nombre: json['nombre'] as String,
+      equipo: json['equipo'] as String,
+      posicion: json['posicion'] as String,
+      precio: json['precio'] as int,
+      puntosEsperados: (json['puntos_esperados'] as num).toDouble(),
+      ratio: (json['ratio'] as num).toDouble(),
+      zscore: (json['zscore'] as num).toDouble(),
+      fotoUrl: json['foto_url'] as String? ?? '',
+    );
+  }
+}
+
 class ApiException implements Exception {
   final String message;
   ApiException(this.message);
@@ -351,6 +389,42 @@ class FantasyApiClient {
           body: jsonEncode({'fcm_token': fcmToken}),
         )
         .timeout(const Duration(seconds: 10));
+  }
+
+  Future<List<Bargain>> getBargains({required String source, int limit = 15}) async {
+    final uri = Uri.parse('$baseUrl/bargains').replace(
+      queryParameters: {'source': source, 'limit': '$limit'},
+    );
+    final response = await http.get(uri).timeout(const Duration(seconds: 15));
+    if (response.statusCode != 200) {
+      throw ApiException('Error ${response.statusCode} al buscar chollos');
+    }
+    final List<dynamic> data = jsonDecode(utf8.decode(response.bodyBytes));
+    return data.map((e) => Bargain.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  Future<bool> getChollosPref(String fcmToken) async {
+    final uri = Uri.parse('$baseUrl/devices/chollos').replace(queryParameters: {'fcm_token': fcmToken});
+    final response = await http.get(uri).timeout(const Duration(seconds: 10));
+    if (response.statusCode != 200) {
+      throw ApiException('Error ${response.statusCode} al leer la preferencia de chollos');
+    }
+    final body = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+    return body['activado'] as bool? ?? false;
+  }
+
+  Future<void> setChollosPref({required String fcmToken, required bool activar}) async {
+    final uri = Uri.parse('$baseUrl/devices/chollos');
+    final response = await http
+        .put(
+          uri,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'fcm_token': fcmToken, 'activar': activar}),
+        )
+        .timeout(const Duration(seconds: 10));
+    if (response.statusCode >= 300) {
+      throw ApiException('Error ${response.statusCode} al guardar la preferencia de chollos');
+    }
   }
 
   Future<void> subscribe({required String fcmToken, required String playerId}) async {

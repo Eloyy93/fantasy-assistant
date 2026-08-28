@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import Date, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import Boolean, Date, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -82,6 +82,10 @@ class DeviceRegistration(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     fcm_token: Mapped[str] = mapped_column(String, unique=True, index=True)
     user_id: Mapped[str] = mapped_column(String, index=True, nullable=True)
+    # Opt-in aparte de las suscripciones por jugador: un chollo es, por
+    # definición, un jugador que el usuario todavía no conoce/sigue, así
+    # que no tiene sentido pedirle que se suscriba uno a uno.
+    notificar_chollos: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
 
 
 class DeviceSubscription(Base):
@@ -136,3 +140,16 @@ class TeamFormation(Base):
     formacion: Mapped[str] = mapped_column(String)
 
     __table_args__ = (UniqueConstraint("device_id", "source", name="uq_formation_device_source"),)
+
+
+class BargainState(Base):
+    """Último estado conocido de "es chollo" de cada jugador, para poder
+    notificar solo cuando un jugador *se convierte* en chollo (transición
+    False -> True) en vez de cada vez que se sincroniza mientras lo siga
+    siendo — si no, la misma alerta se repetiría cada 3h sin aportar nada
+    nuevo."""
+
+    __tablename__ = "bargain_state"
+
+    player_id: Mapped[str] = mapped_column(ForeignKey("players.id"), primary_key=True)
+    es_chollo: Mapped[bool] = mapped_column(Boolean, default=False)
