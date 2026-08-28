@@ -11,6 +11,7 @@ import 'ads_service.dart';
 import 'api_client.dart';
 import 'device_id.dart';
 import 'history_charts.dart';
+import 'legal_links.dart';
 import 'pitch_view.dart';
 import 'purchase_service.dart';
 import 'responsive.dart';
@@ -187,6 +188,22 @@ class _DesktopShellState extends State<DesktopShell> {
                   label: Text(seccion.label),
                 ),
             ],
+            trailing: Expanded(
+              child: Align(
+                alignment: Alignment.bottomCenter,
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 20),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextButton(onPressed: abrirPrivacidad, child: const Text('Privacidad', style: TextStyle(fontSize: 12, color: kTextTertiary))),
+                      TextButton(onPressed: abrirCookies, child: const Text('Cookies', style: TextStyle(fontSize: 12, color: kTextTertiary))),
+                      TextButton(onPressed: abrirAvisoLegal, child: const Text('Aviso legal', style: TextStyle(fontSize: 12, color: kTextTertiary))),
+                    ],
+                  ),
+                ),
+              ),
+            ),
           ),
           const VerticalDivider(width: 1, color: kBorderColor),
           Expanded(
@@ -303,6 +320,8 @@ class _PlayerSearchScreenState extends State<PlayerSearchScreen> {
                         );
                       case 'sin_anuncios':
                         Navigator.of(context).push(MaterialPageRoute(builder: (_) => const NoAdsScreen()));
+                      case 'legal':
+                        abrirAvisoLegal();
                     }
                   },
                   itemBuilder: (context) => [
@@ -351,6 +370,15 @@ class _PlayerSearchScreenState extends State<PlayerSearchScreen> {
                           contentPadding: EdgeInsets.zero,
                         ),
                       ),
+                    const PopupMenuDivider(),
+                    const PopupMenuItem(
+                      value: 'legal',
+                      child: ListTile(
+                        leading: Icon(Icons.gavel_rounded),
+                        title: Text('Privacidad y aviso legal'),
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                    ),
                   ],
                 ),
                 const SizedBox(width: 4),
