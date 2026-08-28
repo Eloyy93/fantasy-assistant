@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
@@ -14,6 +15,9 @@ const String _testBannerAdUnitId = 'ca-app-pub-3940256099942544/6300978111';
 String get bannerAdUnitId => _testBannerAdUnitId;
 
 Future<void> initAds() async {
+  // google_mobile_ads no tiene implementación web — en la versión web no
+  // se muestran anuncios (ver BannerAdBar más abajo).
+  if (kIsWeb) return;
   await MobileAds.instance.initialize();
 }
 
@@ -38,6 +42,7 @@ class _BannerAdBarState extends State<BannerAdBar> {
   }
 
   void _cargar() {
+    if (kIsWeb) return;
     final ad = BannerAd(
       adUnitId: bannerAdUnitId,
       size: AdSize.banner,

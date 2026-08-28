@@ -40,6 +40,11 @@ class PurchaseService {
     final prefs = await SharedPreferences.getInstance();
     adsRemoved.value = prefs.getBool(_prefsKeyAdsRemoved) ?? false;
 
+    // in_app_purchase es solo Android/iOS — en la versión web no hay
+    // tienda con la que hablar (ni sentido: los anuncios ya no se
+    // muestran ahí, ver ads_service.dart).
+    if (kIsWeb) return;
+
     final disponible = await InAppPurchase.instance.isAvailable();
     if (!disponible) {
       error = 'Las compras no están disponibles en este dispositivo.';

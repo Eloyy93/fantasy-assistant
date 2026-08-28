@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
@@ -17,6 +18,10 @@ import 'theme.dart';
 String? currentFcmToken;
 
 Future<void> _setupPushNotifications() async {
+  // Firebase no está configurado para web (requeriría FlutterFire CLI +
+  // credenciales propias del proyecto web) — la versión web funciona sin
+  // notificaciones push, el resto de la app no depende de ellas.
+  if (kIsWeb) return;
   await Firebase.initializeApp();
   final messaging = FirebaseMessaging.instance;
 
@@ -152,8 +157,8 @@ class _PlayerSearchScreenState extends State<PlayerSearchScreen> {
                   Navigator.of(context).push(MaterialPageRoute(builder: (_) => const NoAdsScreen()));
               }
             },
-            itemBuilder: (context) => const [
-              PopupMenuItem(
+            itemBuilder: (context) => [
+              const PopupMenuItem(
                 value: 'plantilla',
                 child: ListTile(
                   leading: Icon(Icons.shield_rounded),
@@ -161,7 +166,7 @@ class _PlayerSearchScreenState extends State<PlayerSearchScreen> {
                   contentPadding: EdgeInsets.zero,
                 ),
               ),
-              PopupMenuItem(
+              const PopupMenuItem(
                 value: 'optimizador',
                 child: ListTile(
                   leading: Icon(Icons.auto_awesome_rounded),
@@ -169,7 +174,7 @@ class _PlayerSearchScreenState extends State<PlayerSearchScreen> {
                   contentPadding: EdgeInsets.zero,
                 ),
               ),
-              PopupMenuItem(
+              const PopupMenuItem(
                 value: 'comparar',
                 child: ListTile(
                   leading: Icon(Icons.compare_arrows_rounded),
@@ -177,7 +182,7 @@ class _PlayerSearchScreenState extends State<PlayerSearchScreen> {
                   contentPadding: EdgeInsets.zero,
                 ),
               ),
-              PopupMenuItem(
+              const PopupMenuItem(
                 value: 'chollos',
                 child: ListTile(
                   leading: Icon(Icons.local_fire_department_rounded),
@@ -185,14 +190,18 @@ class _PlayerSearchScreenState extends State<PlayerSearchScreen> {
                   contentPadding: EdgeInsets.zero,
                 ),
               ),
-              PopupMenuItem(
-                value: 'sin_anuncios',
-                child: ListTile(
-                  leading: Icon(Icons.block_rounded),
-                  title: Text('Quitar anuncios'),
-                  contentPadding: EdgeInsets.zero,
+              // Sin anuncios ni compras en la versión web (google_mobile_ads
+              // e in_app_purchase son solo Android/iOS) — el menú no ofrece
+              // algo que no puede hacer nada.
+              if (!kIsWeb)
+                const PopupMenuItem(
+                  value: 'sin_anuncios',
+                  child: ListTile(
+                    leading: Icon(Icons.block_rounded),
+                    title: Text('Quitar anuncios'),
+                    contentPadding: EdgeInsets.zero,
+                  ),
                 ),
-              ),
             ],
           ),
           const SizedBox(width: 4),

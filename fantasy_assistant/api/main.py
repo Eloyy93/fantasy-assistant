@@ -11,6 +11,7 @@ import unicodedata
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -51,6 +52,18 @@ from fantasy_assistant.modules.lineup_optimizer import FORMACIONES, LineupError,
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Fantasy Assistant API", version="0.1.0")
+
+# La app Android no necesita esto (peticiones nativas, sin same-origin
+# policy), pero la versión web sí — el navegador bloquea el fetch entre
+# orígenes distintos sin esta cabecera. API pública de solo lectura +
+# escrituras scoped por device_id/fcm_token (sin sesión ni credenciales),
+# así que abrir a cualquier origen no añade superficie de ataque real.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Sincroniza dentro del propio proceso de la API (en un hilo aparte, vía
 # APScheduler) en vez de depender de un segundo servicio + BD compartida:
