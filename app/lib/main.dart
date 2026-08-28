@@ -2102,6 +2102,7 @@ class _LineupScreenState extends State<LineupScreen> {
   String _formacion = '4-3-3';
   OptimizedLineup? _resultado;
   bool _loading = false;
+  bool _aplicando = false;
   String? _error;
 
   @override
@@ -2135,6 +2136,54 @@ class _LineupScreenState extends State<LineupScreen> {
       setState(() => _error = '$e');
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _aplicarAMiPlantilla() async {
+    final resultado = _resultado;
+    if (resultado == null) return;
+
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('¿Aplicar esta alineación?'),
+        content: Text(
+          'Sustituirá tu plantilla actual de ${widget.source == 'biwenger' ? 'Biwenger' : 'LaLiga Fantasy'} '
+          'por estos ${resultado.jugadores.length} jugadores en formación ${resultado.formacion}. Esto no se puede deshacer.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancelar')),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Aplicar', style: TextStyle(color: kMintAccent)),
+          ),
+        ],
+      ),
+    );
+    if (confirmar != true) return;
+
+    setState(() => _aplicando = true);
+    try {
+      final deviceId = await getDeviceId();
+      await widget.api.clearTeam(deviceId: deviceId, source: widget.source);
+      await widget.api.setFormacion(deviceId: deviceId, source: widget.source, formacion: resultado.formacion);
+
+      final contadorPorPosicion = <String, int>{};
+      for (final jugador in resultado.jugadores) {
+        final indice = (contadorPorPosicion[jugador.posicion] ?? 0) + 1;
+        contadorPorPosicion[jugador.posicion] = indice;
+        final slot = jugador.posicion == 'POR' ? 'POR1' : '${jugador.posicion}$indice';
+        await widget.api.addToTeam(deviceId: deviceId, playerId: jugador.playerId, slot: slot);
+      }
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Alineación aplicada a tu plantilla')));
+      Navigator.of(context).push(MaterialPageRoute(builder: (_) => TeamScreen(api: widget.api)));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('No se pudo aplicar la alineación: $e')));
+    } finally {
+      if (mounted) setState(() => _aplicando = false);
     }
   }
 
@@ -2204,6 +2253,18 @@ class _LineupScreenState extends State<LineupScreen> {
             ),
             const SizedBox(height: 16),
             PitchView(jugadores: _resultado!.jugadores),
+            const SizedBox(height: 16),
+            OutlinedButton.icon(
+              onPressed: _aplicando ? null : _aplicarAMiPlantilla,
+              icon: _aplicando
+                  ? const SizedBox(
+                      height: 18,
+                      width: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: kMintAccent),
+                    )
+                  : const Icon(Icons.shield_rounded, color: kMintAccent),
+              label: Text(_aplicando ? 'Aplicando…' : 'Añadir a mi plantilla'),
+            ),
             const SizedBox(height: 24),
             const SectionLabel('Detalle'),
             const SizedBox(height: 10),
