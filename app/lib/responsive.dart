@@ -26,3 +26,34 @@ class DesktopContainer extends StatelessWidget {
     );
   }
 }
+
+/// Ajusta un campo (u otro widget con relación de aspecto fija) para que
+/// quepa ENTERO en el espacio disponible, tanto a lo ancho como a lo alto
+/// — a diferencia de [AspectRatio] a secas, que en un contenedor con altura
+/// libre (ej. dentro de un ListView) siempre ocupa todo el ancho aunque
+/// eso dé una altura mayor que la pantalla, obligando a desplazarse para
+/// ver el campo completo. Necesita estar dentro de algo con altura
+/// acotada (ej. un Expanded en un Column no scrolleable).
+class FitAspectRatio extends StatelessWidget {
+  final double aspectRatio;
+  final Widget child;
+
+  const FitAspectRatio({super.key, required this.aspectRatio, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        var width = constraints.maxWidth;
+        var height = width / aspectRatio;
+        if (height > constraints.maxHeight) {
+          height = constraints.maxHeight;
+          width = height * aspectRatio;
+        }
+        return Center(
+          child: SizedBox(width: width, height: height, child: child),
+        );
+      },
+    );
+  }
+}

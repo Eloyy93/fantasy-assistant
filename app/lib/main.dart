@@ -1116,18 +1116,23 @@ class _TeamScreenState extends State<TeamScreen> {
       ),
       body: RefreshIndicator(
         onRefresh: _cargar,
-        child: DesktopContainer(child: _buildBody(context)),
+        child: isDesktop(context) ? _buildBodyDesktop(context) : DesktopContainer(child: _buildBodyMobile(context)),
       ),
     );
   }
 
-  Widget _buildBody(BuildContext context) {
+  ({Map<String, TeamPlayer> asignados, List<TeamPlayer> banquillo}) _repartir() {
     final slots = slotsDeFormacion(_formacion);
     final asignados = <String, TeamPlayer>{
       for (final j in _jugadores ?? [])
         if (j.slot != null && slots.contains(j.slot)) j.slot!: j,
     };
     final banquillo = (_jugadores ?? []).where((j) => j.slot == null || !slots.contains(j.slot)).toList();
+    return (asignados: asignados, banquillo: banquillo);
+  }
+
+  Widget _buildBodyMobile(BuildContext context) {
+    final r = _repartir();
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
@@ -1149,35 +1154,110 @@ class _TeamScreenState extends State<TeamScreen> {
         else ...[
           FormationPitchView(
             formacion: _formacion,
-            asignados: asignados,
-            onTapSlot: (slot) => _onTapSlot(slot, asignados[slot]),
+            asignados: r.asignados,
+            onTapSlot: (slot) => _onTapSlot(slot, r.asignados[slot]),
           ),
           const SizedBox(height: 20),
-          Row(
-            children: [
-              const SectionLabel('Banquillo'),
-              const Spacer(),
-              TextButton.icon(
-                onPressed: _anadirAlBanquillo,
-                icon: const Icon(Icons.add_rounded, size: 18),
-                label: const Text('Añadir'),
-              ),
-            ],
-          ),
+          _banquilloHeader(),
           const SizedBox(height: 6),
-          if (banquillo.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 16),
-              child: Text(
-                'Toca un hueco vacío del campo para colocar jugadores, o añade aquí a los que tengas de reserva.',
-                style: TextStyle(color: kTextSecondary),
-              ),
-            )
-          else
-            for (final jugador in banquillo) ...[
-              _TeamPlayerCard(jugador: jugador, onQuitar: () => _quitarDelEquipo(jugador)),
-              const SizedBox(height: 10),
-            ],
+          _banquilloLista(r.banquillo),
+        ],
+      ],
+    );
+  }
+
+  // En escritorio hay alto de sobra: campo a la izquierda encajado a la
+  // altura disponible (FitAspectRatio) en vez de estirado a lo ancho como
+  // en un ListView (eso daba un campo más alto que la pantalla, obligando
+  // a desplazarse para verlo entero) y el banquillo en un panel aparte a
+  // la derecha que se desplaza por su cuenta si hace falta.
+  Widget _buildBodyDesktop(BuildContext context) {
+    if (_jugadores == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    final r = _repartir();
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            flex: 3,
+            child: Column(
+              children: [
+                _SourceToggle(source: _source, onChanged: _onSourceChanged),
+                const SizedBox(height: 12),
+                _FormationSelector(formacion: _formacion, onChanged: _cambiarFormacion),
+                if (_error != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                  ),
+                const SizedBox(height: 16),
+                Expanded(
+                  child: FitAspectRatio(
+                    aspectRatio: 0.68,
+                    child: FormationPitchView(
+                      formacion: _formacion,
+                      asignados: r.asignados,
+                      onTapSlot: (slot) => _onTapSlot(slot, r.asignados[slot]),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 24),
+          Expanded(
+            flex: 2,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _banquilloHeader(),
+                const SizedBox(height: 10),
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: _banquilloLista(r.banquillo),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _banquilloHeader() {
+    return Row(
+      children: [
+        const SectionLabel('Banquillo'),
+        const Spacer(),
+        TextButton.icon(
+          onPressed: _anadirAlBanquillo,
+          icon: const Icon(Icons.add_rounded, size: 18),
+          label: const Text('Añadir'),
+        ),
+      ],
+    );
+  }
+
+  Widget _banquilloLista(List<TeamPlayer> banquillo) {
+    if (banquillo.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 16),
+        child: Text(
+          'Toca un hueco vacío del campo para colocar jugadores, o añade aquí a los que tengas de reserva.',
+          style: TextStyle(color: kTextSecondary),
+        ),
+      );
+    }
+    return Column(
+      children: [
+        for (final jugador in banquillo) ...[
+          _TeamPlayerCard(jugador: jugador, onQuitar: () => _quitarDelEquipo(jugador)),
+          const SizedBox(height: 10),
         ],
       ],
     );
@@ -2386,129 +2466,202 @@ class _LineupScreenState extends State<LineupScreen> {
     }
   }
 
+  Widget _controles() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            TextField(
+              controller: _presupuestoController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: 'Presupuesto (€)'),
+            ),
+            const SizedBox(height: 14),
+            DropdownButtonFormField<String>(
+              initialValue: _formacion,
+              decoration: const InputDecoration(labelText: 'Formación'),
+              dropdownColor: kSurfaceHighColor,
+              items: _formaciones.map((f) => DropdownMenuItem(value: f, child: Text(f))).toList(),
+              onChanged: (value) => setState(() => _formacion = value ?? _formacion),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _statsRow() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            StatTile(label: 'Formación', value: _resultado!.formacion),
+            StatTile(
+              label: 'Pts. esperados',
+              value: _resultado!.puntosEsperados.toStringAsFixed(1),
+              valueColor: kMintAccent,
+            ),
+            StatTile(
+              label: 'Presupuesto',
+              value: '${(_resultado!.presupuestoUsado / 1000000).toStringAsFixed(1)}M€',
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _aplicarBoton() {
+    return OutlinedButton.icon(
+      onPressed: _aplicando ? null : _aplicarAMiPlantilla,
+      icon: _aplicando
+          ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2, color: kMintAccent))
+          : const Icon(Icons.shield_rounded, color: kMintAccent),
+      label: Text(_aplicando ? 'Aplicando…' : 'Añadir a mi plantilla'),
+    );
+  }
+
+  Widget _detalleItem(LineupPlayer j) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Material(
+        color: kSurfaceColor,
+        borderRadius: BorderRadius.circular(18),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(borderRadius: BorderRadius.circular(18), border: Border.all(color: kBorderColor)),
+          child: Row(
+            children: [
+              PlayerAvatar(fotoUrl: j.fotoUrl, posicion: j.posicion),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(j.nombre, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${j.equipo} · ${j.puntosEsperados.toStringAsFixed(1)} pts',
+                      style: const TextStyle(fontSize: 13, color: kTextSecondary),
+                    ),
+                  ],
+                ),
+              ),
+              Text(
+                '${(j.precio / 1000000).toStringAsFixed(2)} M€',
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBodyMobile(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+      children: [
+        _controles(),
+        const SizedBox(height: 16),
+        FilledButton(
+          onPressed: _loading ? null : _calcular,
+          child: _loading
+              ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+              : const Text('Calcular alineación óptima'),
+        ),
+        if (_error != null) ...[
+          const SizedBox(height: 16),
+          Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+        ],
+        if (_resultado != null) ...[
+          const SizedBox(height: 24),
+          _statsRow(),
+          const SizedBox(height: 16),
+          PitchView(jugadores: _resultado!.jugadores),
+          const SizedBox(height: 16),
+          _aplicarBoton(),
+          const SizedBox(height: 24),
+          const SectionLabel('Detalle'),
+          const SizedBox(height: 10),
+          ..._resultado!.jugadores.map(_detalleItem),
+        ],
+      ],
+    );
+  }
+
+  // En escritorio: controles + campo a la izquierda (el campo encajado a
+  // la altura disponible con FitAspectRatio, no estirado a lo ancho como
+  // en un ListView) y el detalle en un panel scrolleable a la derecha —
+  // así se ve el campo entero sin tener que desplazarse hasta abajo.
+  Widget _buildBodyDesktop(BuildContext context) {
+    final resultado = _resultado;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            flex: 3,
+            child: Column(
+              children: [
+                _controles(),
+                const SizedBox(height: 16),
+                FilledButton(
+                  onPressed: _loading ? null : _calcular,
+                  child: _loading
+                      ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                      : const Text('Calcular alineación óptima'),
+                ),
+                if (_error != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                  ),
+                if (resultado != null) ...[
+                  const SizedBox(height: 16),
+                  _statsRow(),
+                  const SizedBox(height: 16),
+                  Expanded(child: FitAspectRatio(aspectRatio: 0.68, child: PitchView(jugadores: resultado.jugadores))),
+                  const SizedBox(height: 16),
+                  _aplicarBoton(),
+                ],
+              ],
+            ),
+          ),
+          if (resultado != null) ...[
+            const SizedBox(width: 24),
+            Expanded(
+              flex: 2,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SectionLabel('Detalle'),
+                  const SizedBox(height: 10),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      child: Column(children: resultado.jugadores.map(_detalleItem).toList()),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: Text('Optimizador · ${widget.source == 'biwenger' ? 'Biwenger' : 'LaLiga Fantasy'}'),
       ),
-      body: DesktopContainer(child: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
-        children: [
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  TextField(
-                    controller: _presupuestoController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Presupuesto (€)'),
-                  ),
-                  const SizedBox(height: 14),
-                  DropdownButtonFormField<String>(
-                    initialValue: _formacion,
-                    decoration: const InputDecoration(labelText: 'Formación'),
-                    dropdownColor: kSurfaceHighColor,
-                    items: _formaciones.map((f) => DropdownMenuItem(value: f, child: Text(f))).toList(),
-                    onChanged: (value) => setState(() => _formacion = value ?? _formacion),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          FilledButton(
-            onPressed: _loading ? null : _calcular,
-            child: _loading
-                ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
-                : const Text('Calcular alineación óptima'),
-          ),
-          if (_error != null) ...[
-            const SizedBox(height: 16),
-            Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
-          ],
-          if (_resultado != null) ...[
-            const SizedBox(height: 24),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(18),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    StatTile(label: 'Formación', value: _resultado!.formacion),
-                    StatTile(
-                      label: 'Pts. esperados',
-                      value: _resultado!.puntosEsperados.toStringAsFixed(1),
-                      valueColor: kMintAccent,
-                    ),
-                    StatTile(
-                      label: 'Presupuesto',
-                      value: '${(_resultado!.presupuestoUsado / 1000000).toStringAsFixed(1)}M€',
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            PitchView(jugadores: _resultado!.jugadores),
-            const SizedBox(height: 16),
-            OutlinedButton.icon(
-              onPressed: _aplicando ? null : _aplicarAMiPlantilla,
-              icon: _aplicando
-                  ? const SizedBox(
-                      height: 18,
-                      width: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: kMintAccent),
-                    )
-                  : const Icon(Icons.shield_rounded, color: kMintAccent),
-              label: Text(_aplicando ? 'Aplicando…' : 'Añadir a mi plantilla'),
-            ),
-            const SizedBox(height: 24),
-            const SectionLabel('Detalle'),
-            const SizedBox(height: 10),
-            ..._resultado!.jugadores.map(
-              (j) => Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: Material(
-                  color: kSurfaceColor,
-                  borderRadius: BorderRadius.circular(18),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(18),
-                      border: Border.all(color: kBorderColor),
-                    ),
-                    child: Row(
-                      children: [
-                        PlayerAvatar(fotoUrl: j.fotoUrl, posicion: j.posicion),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(j.nombre, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
-                              const SizedBox(height: 2),
-                              Text(
-                                '${j.equipo} · ${j.puntosEsperados.toStringAsFixed(1)} pts',
-                                style: const TextStyle(fontSize: 13, color: kTextSecondary),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Text(
-                          '${(j.precio / 1000000).toStringAsFixed(2)} M€',
-                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ],
-      )),
+      body: isDesktop(context) ? _buildBodyDesktop(context) : DesktopContainer(child: _buildBodyMobile(context)),
     );
   }
 }
