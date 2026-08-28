@@ -2180,6 +2180,7 @@ class _LineupScreenState extends State<LineupScreen> {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Alineación aplicada a tu plantilla')));
       Navigator.of(context).push(MaterialPageRoute(builder: (_) => TeamScreen(api: widget.api)));
     } catch (e) {
+      print('[lineup->team] error: $e');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('No se pudo aplicar la alineación: $e')));
     } finally {

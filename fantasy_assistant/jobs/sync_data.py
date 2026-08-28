@@ -60,6 +60,17 @@ def sync_once(source: FantasyDataSource | None = None) -> int:
             record_id = _composite_id(p.source, p.id)
 
             try:
+                # Peticiones de red PRIMERO, antes de tocar la sesión de
+                # escritura. Si se pidieran después de un session.add/execute,
+                # la transacción de escritura quedaría abierta durante toda
+                # la llamada HTTP (lenta en algunas fuentes, ej. LaLiga
+                # Fantasy hace una petición por jugador) y bloquearía a
+                # cualquier otro escritor — visto en producción como
+                # peticiones de la app (guardar plantilla, formación...)
+                # colgadas hasta el busy_timeout de SQLite (30s).
+                precio_history = source.get_player_price_history(p.id)
+                puntos_history = source.get_player_points_history(p.id)
+
                 existing = session.get(PlayerRecord, record_id)
                 if existing:
                     alert = alerts.check_price_change(record_id, p.nombre, existing.precio, p.precio)
@@ -88,10 +99,10 @@ def sync_once(source: FantasyDataSource | None = None) -> int:
                 # LaLiga Fantasy da hasta 30 días de precios en la misma
                 # petición que el listado de jugadores). Biwenger devuelve
                 # lista vacía aquí.
-                for punto in source.get_player_price_history(p.id):
+                for punto in precio_history:
                     _upsert_price_snapshot(session, record_id, p.source, dt.date.fromisoformat(punto.fecha), punto.precio)
 
-                for entry in source.get_player_points_history(p.id):
+                for entry in puntos_history:
                     _upsert_points(session, record_id, p.source, entry.jornada, entry.puntos)
 
                 # Commit por jugador en vez de uno solo al final: con fuentes
