@@ -322,6 +322,8 @@ class _PlayerSearchScreenState extends State<PlayerSearchScreen> {
                         );
                       case 'sin_anuncios':
                         Navigator.of(context).push(MaterialPageRoute(builder: (_) => const NoAdsScreen()));
+                      case 'notificaciones':
+                        Navigator.of(context).push(MaterialPageRoute(builder: (_) => NotificationsScreen(api: _api)));
                       case 'legal':
                         abrirAvisoLegal();
                     }
@@ -359,6 +361,18 @@ class _PlayerSearchScreenState extends State<PlayerSearchScreen> {
                         contentPadding: EdgeInsets.zero,
                       ),
                     ),
+                    // Notificaciones push solo existen en Android (la
+                    // versión web no registra token de Firebase) — el
+                    // menú no ofrece algo que no puede hacer nada.
+                    if (!kIsWeb)
+                      const PopupMenuItem(
+                        value: 'notificaciones',
+                        child: ListTile(
+                          leading: Icon(Icons.notifications_rounded),
+                          title: Text('Notificaciones'),
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                      ),
                     // Sin anuncios ni compras en la versión web
                     // (google_mobile_ads e in_app_purchase son solo
                     // Android/iOS) — el menú no ofrece algo que no puede
@@ -1762,6 +1776,193 @@ class _CaptainCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Pantalla central para gestionar todas las notificaciones push
+/// activas de este dispositivo — antes había que ir jugador por jugador
+/// a su ficha para quitar una alerta de precio, o entrar en "Chollos"
+/// para el aviso de chollos nuevos. Solo tiene sentido en Android (la
+/// versión web no registra notificaciones push).
+class NotificationsScreen extends StatefulWidget {
+  final FantasyApiClient api;
+
+  const NotificationsScreen({super.key, required this.api});
+
+  @override
+  State<NotificationsScreen> createState() => _NotificationsScreenState();
+}
+
+class _NotificationsScreenState extends State<NotificationsScreen> {
+  bool _loading = true;
+  bool _chollosActivado = false;
+  List<Player> _suscripciones = [];
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _cargar();
+  }
+
+  Future<void> _cargar() async {
+    final token = currentFcmToken;
+    if (token == null) {
+      setState(() => _loading = false);
+      return;
+    }
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final resultados = await Future.wait([
+        widget.api.getChollosPref(token),
+        widget.api.getSubscriptionsDetalle(token),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _chollosActivado = resultados[0] as bool;
+        _suscripciones = resultados[1] as List<Player>;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = 'No se pudieron cargar las notificaciones: $e');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _cambiarChollos(bool activar) async {
+    final token = currentFcmToken;
+    if (token == null) return;
+    setState(() => _chollosActivado = activar);
+    try {
+      await widget.api.setChollosPref(fcmToken: token, activar: activar);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _chollosActivado = !activar);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('No se pudo guardar: $e')));
+    }
+  }
+
+  Future<void> _quitarSuscripcion(Player jugador) async {
+    final token = currentFcmToken;
+    if (token == null) return;
+    final anterior = List<Player>.from(_suscripciones);
+    setState(() => _suscripciones.removeWhere((p) => p.id == jugador.id));
+    try {
+      await widget.api.unsubscribe(fcmToken: token, playerId: jugador.id);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _suscripciones = anterior);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('No se pudo desactivar: $e')));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Notificaciones')),
+      body: RefreshIndicator(
+        onRefresh: _cargar,
+        child: DesktopContainer(child: _buildBody(context)),
+      ),
+    );
+  }
+
+  Widget _buildBody(BuildContext context) {
+    if (currentFcmToken == null) {
+      return ListView(
+        padding: const EdgeInsets.all(32),
+        children: const [
+          SizedBox(height: 60),
+          Icon(Icons.notifications_off_rounded, size: 40, color: kTextTertiary),
+          SizedBox(height: 12),
+          Text(
+            'Este dispositivo todavía no se ha registrado para notificaciones — revisa tu conexión y vuelve a abrir la app.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: kTextSecondary),
+          ),
+        ],
+      );
+    }
+
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+      children: [
+        if (_error != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 16),
+            child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+          ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          decoration: BoxDecoration(
+            color: kSurfaceColor,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: kBorderColor),
+          ),
+          child: SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            value: _chollosActivado,
+            onChanged: _cambiarChollos,
+            activeThumbColor: kMintAccent,
+            secondary: const Icon(Icons.local_fire_department_rounded, color: kMintAccent),
+            title: const Text('Chollos nuevos', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+            subtitle: const Text('Avisa cuando aparezca un jugador infravalorado', style: TextStyle(fontSize: 12, color: kTextSecondary)),
+          ),
+        ),
+        const SizedBox(height: 24),
+        const SectionLabel('Alertas de precio por jugador'),
+        const SizedBox(height: 10),
+        if (_suscripciones.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 16),
+            child: Text(
+              'No tienes ninguna alerta de precio activa. Actívalas desde la ficha de cada jugador.',
+              style: TextStyle(color: kTextSecondary),
+            ),
+          )
+        else
+          for (final jugador in _suscripciones) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: kSurfaceColor,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: kBorderColor),
+              ),
+              child: Row(
+                children: [
+                  PlayerAvatar(fotoUrl: jugador.fotoUrl, posicion: jugador.posicion),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(jugador.nombre, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 2),
+                        Text(equipoLabel(jugador.equipo), style: const TextStyle(fontSize: 13, color: kTextSecondary)),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: Icon(Icons.notifications_off_rounded, color: Theme.of(context).colorScheme.error),
+                    tooltip: 'Desactivar alerta',
+                    onPressed: () => _quitarSuscripcion(jugador),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+          ],
+      ],
     );
   }
 }

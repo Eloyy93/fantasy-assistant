@@ -403,6 +403,23 @@ def list_subscriptions(fcm_token: str = Query(...), db: Session = Depends(get_db
     )
 
 
+@app.get("/subscriptions/detalle", response_model=list[PlayerOut])
+def list_subscriptions_detalle(fcm_token: str = Query(...), db: Session = Depends(get_db)) -> list[PlayerRecord]:
+    """Ficha completa de cada jugador al que este dispositivo está
+    suscrito — usado por la pantalla "Notificaciones" para poder
+    mostrar nombre/foto en vez de solo el id y dejar desactivar cada
+    una sin tener que ir jugador por jugador."""
+    player_ids = db.execute(
+        select(DeviceSubscription.player_id).where(DeviceSubscription.fcm_token == fcm_token)
+    ).scalars().all()
+    if not player_ids:
+        return []
+    jugadores = db.execute(select(PlayerRecord).where(PlayerRecord.id.in_(player_ids))).scalars().all()
+    # Mantiene el orden de suscripción en vez del que devuelva el IN().
+    por_id = {p.id: p for p in jugadores}
+    return [por_id[pid] for pid in player_ids if pid in por_id]
+
+
 @app.post("/team", status_code=201)
 def add_to_team(payload: TeamMemberIn, db: Session = Depends(get_db)) -> dict:
     player = db.get(PlayerRecord, payload.player_id)

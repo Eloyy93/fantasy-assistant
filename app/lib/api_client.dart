@@ -523,6 +523,16 @@ class FantasyApiClient {
     return data.cast<String>();
   }
 
+  Future<List<Player>> getSubscriptionsDetalle(String fcmToken) async {
+    final uri = Uri.parse('$baseUrl/subscriptions/detalle').replace(queryParameters: {'fcm_token': fcmToken});
+    final response = await http.get(uri).timeout(const Duration(seconds: 15));
+    if (response.statusCode != 200) {
+      throw ApiException('Error ${response.statusCode} al leer las suscripciones');
+    }
+    final List<dynamic> data = jsonDecode(utf8.decode(response.bodyBytes));
+    return data.map((e) => Player.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
   Future<List<TeamPlayer>> getTeam(String deviceId, {String? source}) async {
     final uri = Uri.parse('$baseUrl/team').replace(
       queryParameters: {'device_id': deviceId, if (source != null) 'source': source},
