@@ -386,9 +386,9 @@ class FantasyApiClient {
 
   FantasyApiClient({this.baseUrl = kApiBaseUrl});
 
-  Future<List<Player>> searchPlayers(String query, {required String source}) async {
+  Future<List<Player>> searchPlayers(String query, {required String source, int limit = 30}) async {
     final uri = Uri.parse('$baseUrl/players').replace(
-      queryParameters: {if (query.isNotEmpty) 'q': query, 'limit': '30', 'source': source},
+      queryParameters: {if (query.isNotEmpty) 'q': query, 'limit': '$limit', 'source': source},
     );
     final response = await http.get(uri).timeout(const Duration(seconds: 10));
     if (response.statusCode != 200) {
@@ -397,6 +397,11 @@ class FantasyApiClient {
     final List<dynamic> data = jsonDecode(utf8.decode(response.bodyBytes));
     return data.map((e) => Player.fromJson(e as Map<String, dynamic>)).toList();
   }
+
+  /// Mercado completo de la fuente — usado por la importación de
+  /// plantilla desde captura, que necesita comparar el texto reconocido
+  /// contra todos los jugadores, no solo los primeros 30.
+  Future<List<Player>> getAllPlayers(String source) => searchPlayers('', source: source, limit: 1000);
 
   Future<Prediccion> getPrediccion(String playerId) async {
     final uri = Uri.parse('$baseUrl/players/$playerId/prediccion');

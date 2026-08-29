@@ -170,7 +170,10 @@ def _normalizar_busqueda(texto: str) -> str:
 def list_players(
     q: str | None = Query(default=None, description="Filtro por nombre o equipo (contiene, insensible a mayúsculas y acentos)"),
     source: str = Query(default=config.fantasy_source),
-    limit: int = Query(default=50, le=200),
+    # le=1000 (no solo 200): la importación de plantilla por captura
+    # necesita comparar contra el mercado entero (~600 jugadores) para
+    # encontrar coincidencias, no solo una página de resultados.
+    limit: int = Query(default=50, le=1000),
     db: Session = Depends(get_db),
 ) -> list[PlayerRecord]:
     stmt = select(PlayerRecord).where(PlayerRecord.source == source)

@@ -5,6 +5,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:image_picker/image_picker.dart';
 
 import 'adsense_sidebar.dart';
 import 'ads_service.dart';
@@ -12,6 +13,7 @@ import 'api_client.dart';
 import 'device_id.dart';
 import 'history_charts.dart';
 import 'legal_links.dart';
+import 'lineup_scan.dart';
 import 'pitch_view.dart';
 import 'purchase_service.dart';
 import 'responsive.dart';
@@ -1145,6 +1147,28 @@ class _TeamScreenState extends State<TeamScreen> {
       appBar: AppBar(
         title: const Text('Mi plantilla'),
         actions: [
+          // Solo Android: usa ML Kit (reconocimiento de texto en el
+          // dispositivo), que no está disponible en la versión web.
+          if (!kIsWeb)
+            IconButton(
+              icon: const Icon(Icons.document_scanner_rounded),
+              tooltip: 'Importar desde captura',
+              onPressed: _deviceId == null
+                  ? null
+                  : () async {
+                      final anadidos = await Navigator.of(context).push<bool>(
+                        MaterialPageRoute(
+                          builder: (_) => ImportarCapturaScreen(
+                            api: widget.api,
+                            deviceId: _deviceId!,
+                            source: _source,
+                            existentes: (_jugadores ?? []).map((j) => j.id).toSet(),
+                          ),
+                        ),
+                      );
+                      if (anadidos == true) _cargar();
+                    },
+            ),
           IconButton(
             icon: const Icon(Icons.military_tech_rounded),
             tooltip: 'Capitán óptimo',
@@ -1620,6 +1644,256 @@ class _RecomendadoCard extends StatelessWidget {
                   ),
                 ],
               ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Importa la plantilla a partir de una captura de pantalla de Biwenger o
+/// LaLiga Fantasy: reconoce el texto de la imagen en el propio
+/// dispositivo (ML Kit, gratis, sin conexión) y lo compara contra el
+/// mercado para proponer coincidencias. El reconocimiento de una
+/// interfaz tan visual (fotos, escudos, precios superpuestos al nombre)
+/// nunca es perfecto, así que el usuario revisa y confirma antes de que
+/// se añada nada — y los que se confirman van al banquillo (slot=null),
+/// no directamente al campo: la captura dice QUIÉN, no en qué hueco
+/// exacto de la formación va cada uno.
+class ImportarCapturaScreen extends StatefulWidget {
+  final FantasyApiClient api;
+  final String deviceId;
+  final String source;
+  final Set<String> existentes;
+
+  const ImportarCapturaScreen({
+    super.key,
+    required this.api,
+    required this.deviceId,
+    required this.source,
+    required this.existentes,
+  });
+
+  @override
+  State<ImportarCapturaScreen> createState() => _ImportarCapturaScreenState();
+}
+
+class _ImportarCapturaScreenState extends State<ImportarCapturaScreen> {
+  bool _procesando = false;
+  bool _anadiendo = false;
+  String? _error;
+  List<CandidatoEscaneado>? _candidatos;
+  final Set<String> _seleccionados = {};
+
+  Future<void> _elegirImagen() async {
+    final origen = await showModalBottomSheet<ImageSource>(
+      context: context,
+      backgroundColor: kSurfaceColor,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 12),
+            ListTile(
+              leading: const Icon(Icons.photo_library_rounded),
+              title: const Text('Elegir de la galería'),
+              onTap: () => Navigator.pop(sheetContext, ImageSource.gallery),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_camera_rounded),
+              title: const Text('Hacer una foto'),
+              onTap: () => Navigator.pop(sheetContext, ImageSource.camera),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+    if (origen == null) return;
+
+    final archivo = await ImagePicker().pickImage(source: origen, imageQuality: 90);
+    if (archivo == null) return;
+
+    setState(() {
+      _procesando = true;
+      _error = null;
+      _candidatos = null;
+      _seleccionados.clear();
+    });
+    try {
+      final resultados = await Future.wait([
+        reconocerTexto(archivo.path),
+        widget.api.getAllPlayers(widget.source),
+      ]);
+      final lineasTexto = resultados[0] as List<String>;
+      final mercado = (resultados[1] as List<Player>).where((p) => !widget.existentes.contains(p.id)).toList();
+      final candidatos = emparejarJugadores(lineasTexto, mercado);
+
+      if (!mounted) return;
+      setState(() {
+        _candidatos = candidatos;
+        // Preselecciona solo las coincidencias más fiables — el resto
+        // queda visible pero sin marcar, para que el usuario decida.
+        _seleccionados.addAll(candidatos.where((c) => c.confianza >= 0.75).map((c) => c.jugador.id));
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = 'No se pudo leer la captura: $e');
+    } finally {
+      if (mounted) setState(() => _procesando = false);
+    }
+  }
+
+  Future<void> _confirmar() async {
+    final candidatos = _candidatos;
+    if (candidatos == null || _seleccionados.isEmpty) return;
+
+    setState(() => _anadiendo = true);
+    var fallos = 0;
+    try {
+      for (final candidato in candidatos.where((c) => _seleccionados.contains(c.jugador.id))) {
+        try {
+          await widget.api.addToTeam(deviceId: widget.deviceId, playerId: candidato.jugador.id);
+        } catch (_) {
+          fallos++;
+        }
+      }
+      if (!mounted) return;
+      if (fallos > 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$fallos jugador(es) no se pudieron añadir')),
+        );
+      }
+      Navigator.of(context).pop(true);
+    } finally {
+      if (mounted) setState(() => _anadiendo = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final candidatos = _candidatos;
+    return Scaffold(
+      appBar: AppBar(title: const Text('Importar desde captura')),
+      body: DesktopContainer(
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+          children: [
+            const Text(
+              'Haz una captura de tu alineación en Biwenger o LaLiga Fantasy y '
+              'súbela aquí — se leen los nombres de la imagen y se proponen '
+              'coincidencias para que confirmes cuáles añadir. Se añaden al '
+              'banquillo; colócalos en el campo tú mismo desde "Mi plantilla".',
+              style: TextStyle(color: kTextSecondary, fontSize: 13),
+            ),
+            const SizedBox(height: 20),
+            OutlinedButton.icon(
+              onPressed: _procesando ? null : _elegirImagen,
+              icon: _procesando
+                  ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2, color: kMintAccent))
+                  : const Icon(Icons.add_photo_alternate_rounded, color: kMintAccent),
+              label: Text(_procesando ? 'Leyendo captura…' : 'Elegir captura'),
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 16),
+              Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+            ],
+            if (candidatos != null) ...[
+              const SizedBox(height: 24),
+              if (candidatos.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 16),
+                  child: Text(
+                    'No se reconoció a ningún jugador en la imagen. Prueba con una captura más nítida o donde se vean bien los nombres.',
+                    style: TextStyle(color: kTextSecondary),
+                  ),
+                )
+              else ...[
+                SectionLabel('Coincidencias (${candidatos.length})'),
+                const SizedBox(height: 4),
+                const Text(
+                  'Revisa antes de confirmar — el reconocimiento de texto puede fallar.',
+                  style: TextStyle(color: kTextTertiary, fontSize: 12),
+                ),
+                const SizedBox(height: 12),
+                for (final candidato in candidatos) ...[
+                  _CandidatoTile(
+                    candidato: candidato,
+                    marcado: _seleccionados.contains(candidato.jugador.id),
+                    onChanged: (marcado) => setState(() {
+                      if (marcado) {
+                        _seleccionados.add(candidato.jugador.id);
+                      } else {
+                        _seleccionados.remove(candidato.jugador.id);
+                      }
+                    }),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+                const SizedBox(height: 16),
+                FilledButton(
+                  onPressed: (_seleccionados.isEmpty || _anadiendo) ? null : _confirmar,
+                  child: _anadiendo
+                      ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                      : Text('Añadir ${_seleccionados.length} a la plantilla'),
+                ),
+              ],
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CandidatoTile extends StatelessWidget {
+  final CandidatoEscaneado candidato;
+  final bool marcado;
+  final ValueChanged<bool> onChanged;
+
+  const _CandidatoTile({required this.candidato, required this.marcado, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    final jugador = candidato.jugador;
+    final porcentaje = (candidato.confianza * 100).round();
+    final colorConfianza = candidato.confianza >= 0.75 ? kMintAccent : kTextTertiary;
+
+    return Material(
+      color: kSurfaceColor,
+      borderRadius: BorderRadius.circular(18),
+      child: InkWell(
+        onTap: () => onChanged(!marcado),
+        borderRadius: BorderRadius.circular(18),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: marcado ? kMintAccent.withValues(alpha: 0.6) : kBorderColor),
+          ),
+          child: Row(
+            children: [
+              Checkbox(
+                value: marcado,
+                onChanged: (v) => onChanged(v ?? false),
+                activeColor: kMintAccent,
+                checkColor: Colors.black,
+              ),
+              PlayerAvatar(fotoUrl: jugador.fotoUrl, posicion: jugador.posicion),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(jugador.nombre, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 2),
+                    Text(equipoLabel(jugador.equipo), style: const TextStyle(fontSize: 13, color: kTextSecondary)),
+                  ],
+                ),
+              ),
+              Text('$porcentaje%', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: colorConfianza)),
             ],
           ),
         ),
