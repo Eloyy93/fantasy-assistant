@@ -2060,23 +2060,28 @@ class _BargainsScreenState extends State<BargainsScreen> {
           ),
           const SizedBox(height: 16),
           _SourceToggle(source: _source, onChanged: _onSourceChanged),
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            decoration: BoxDecoration(
-              color: kSurfaceColor,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: kBorderColor),
+          // Sin notificaciones push en la versión web (no hay token de
+          // Firebase) — no tiene sentido ofrecer un interruptor que no
+          // puede hacer nada.
+          if (!kIsWeb) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              decoration: BoxDecoration(
+                color: kSurfaceColor,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: kBorderColor),
+              ),
+              child: SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                value: _notificar,
+                onChanged: _loadingPref ? null : _cambiarPreferencia,
+                activeThumbColor: kMintAccent,
+                title: const Text('Avisarme de chollos nuevos', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                subtitle: const Text('Notificación cuando aparezca un jugador infravalorado', style: TextStyle(fontSize: 12, color: kTextSecondary)),
+              ),
             ),
-            child: SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              value: _notificar,
-              onChanged: _loadingPref ? null : _cambiarPreferencia,
-              activeThumbColor: kMintAccent,
-              title: const Text('Avisarme de chollos nuevos', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-              subtitle: const Text('Notificación cuando aparezca un jugador infravalorado', style: TextStyle(fontSize: 12, color: kTextSecondary)),
-            ),
-          ),
+          ],
           const SizedBox(height: 20),
           if (_loading)
             const Padding(padding: EdgeInsets.symmetric(vertical: 24), child: Center(child: CircularProgressIndicator())),
@@ -2522,8 +2527,10 @@ class _PrediccionScreenState extends State<PrediccionScreen> {
             ),
             const SizedBox(height: 14),
             _buildBotonPlantilla(context),
-            const SizedBox(height: 10),
-            _buildBotonAlertas(context),
+            if (!kIsWeb) ...[
+              const SizedBox(height: 10),
+              _buildBotonAlertas(context),
+            ],
             const SizedBox(height: 28),
             if (_error != null) Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
             if (_prediccion == null && _error == null) const Center(child: CircularProgressIndicator()),
