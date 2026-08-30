@@ -1753,9 +1753,29 @@ class _ImportarCapturaScreenState extends State<ImportarCapturaScreen> {
     setState(() => _anadiendo = true);
     var fallos = 0;
     try {
-      for (final candidato in candidatos.where((c) => _seleccionados.contains(c.jugador.id))) {
+      // Coloca cada jugador en un hueco libre del campo según su posición
+      // y la formación actual — solo va al banquillo si no hay hueco.
+      final resultados = await Future.wait([
+        widget.api.getTeam(widget.deviceId, source: widget.source),
+        widget.api.getFormacion(deviceId: widget.deviceId, source: widget.source),
+      ]);
+      final equipoActual = resultados[0] as List<TeamPlayer>;
+      final formacion = resultados[1] as String;
+      final slotsOcupados = equipoActual.where((j) => j.slot != null).map((j) => j.slot!).toSet();
+      final slotsLibresPorPosicion = <String, List<String>>{};
+      for (final slot in slotsDeFormacion(formacion)) {
+        if (slotsOcupados.contains(slot)) continue;
+        slotsLibresPorPosicion.putIfAbsent(posicionDeSlot(slot), () => []).add(slot);
+      }
+
+      final seleccionados = candidatos.where((c) => _seleccionados.contains(c.jugador.id)).toList()
+        ..sort((a, b) => b.confianza.compareTo(a.confianza));
+
+      for (final candidato in seleccionados) {
         try {
-          await widget.api.addToTeam(deviceId: widget.deviceId, playerId: candidato.jugador.id);
+          final libres = slotsLibresPorPosicion[candidato.jugador.posicion];
+          final slot = (libres != null && libres.isNotEmpty) ? libres.removeAt(0) : null;
+          await widget.api.addToTeam(deviceId: widget.deviceId, playerId: candidato.jugador.id, slot: slot);
         } catch (_) {
           fallos++;
         }
@@ -1784,8 +1804,9 @@ class _ImportarCapturaScreenState extends State<ImportarCapturaScreen> {
             const Text(
               'Haz una captura de tu alineación en Biwenger o LaLiga Fantasy y '
               'súbela aquí — se leen los nombres de la imagen y se proponen '
-              'coincidencias para que confirmes cuáles añadir. Se añaden al '
-              'banquillo; colócalos en el campo tú mismo desde "Mi plantilla".',
+              'coincidencias para que confirmes cuáles añadir. Se colocan en '
+              'el campo según su posición; si no hay hueco libre van al '
+              'banquillo.',
               style: TextStyle(color: kTextSecondary, fontSize: 13),
             ),
             const SizedBox(height: 20),

@@ -103,5 +103,15 @@ double _puntuarCoincidencia(String lineaNormalizada, String nombreNormalizado) {
   // toda la línea) sin necesitar el apellido completo.
   final ratioLinea = coincidencias / palabrasLinea.length;
   final ratioNombre = coincidencias / palabrasNombre.length;
+
+  // Con un nombre de varias palabras (ej. "Fermín López"), una sola
+  // palabra suelta solo es prueba suficiente si ES la línea entera
+  // (ratioLinea 1.0, como cuando Biwenger muestra solo "Fermín" bajo la
+  // foto) — si la línea trae además OTRAS palabras que no coinciden con
+  // nada del nombre, esa única coincidencia es demasiado débil: apellidos
+  // comunes aparecen por azar en texto de la interfaz sin relación
+  // (precios, menús, otros jugadores...) y ahí sí queremos descartarlo.
+  if (palabrasNombre.length > 1 && coincidencias == 1 && ratioLinea < 1.0) return 0;
+
   return (0.5 * ratioLinea + 0.5 * ratioNombre).clamp(0.0, 1.0);
 }
