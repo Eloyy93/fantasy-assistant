@@ -118,20 +118,25 @@ double _puntuarCoincidencia(
   // ninguna palabra "extra" ajena a él.
   if (!palabrasLinea.every(palabrasNombre.contains)) return 0;
 
-  // Con UNA sola palabra coincidente (ej. solo se lee "Diego", sin
-  // apellido), esa palabra solo es prueba válida si identifica a un
-  // ÚNICO jugador del mercado — "Pedri" o "Raphinha" son apodos que no
-  // comparte nadie más, pero "Diego" lo llevan varios jugadores
-  // distintos, y ahí no hay forma de saber a cuál se refiere la
-  // captura: mejor no proponer ninguno que proponerlos todos.
-  if (palabrasLinea.length == 1) {
-    final duenos = duenosPorPalabra[palabrasLinea.first];
-    if (duenos != null && duenos.length > 1) return 0;
-  }
-
   // Cuanto más del nombre completo cubre la línea, más fiable — "Pedri"
   // contra "Pedri González" cubre la mitad del nombre (0.75 de
   // confianza); el nombre completo cubre el 100% (1.0).
   final ratioNombre = palabrasLinea.length / palabrasNombre.length;
-  return (0.5 + 0.5 * ratioNombre).clamp(0.0, 1.0);
+  final puntuacion = (0.5 + 0.5 * ratioNombre).clamp(0.0, 1.0);
+
+  // Con UNA sola palabra coincidente (ej. solo se lee "Diego", sin
+  // apellido) que además comparten varios jugadores del mercado entero,
+  // no podemos saber a cuál se refiere la captura — pero descartarla
+  // del todo (como se hacía antes) también tira jugadores que sí eran
+  // correctos, porque "compartir apellido con alguien en todo el
+  // mercado" no significa que haya ambigüedad real DENTRO de esta
+  // captura. Se mantiene en la lista con confianza reducida (por debajo
+  // del umbral de preselección) para que el usuario la revise, en vez
+  // de proponerla ya marcada o hacerla desaparecer.
+  if (palabrasLinea.length == 1) {
+    final duenos = duenosPorPalabra[palabrasLinea.first];
+    if (duenos != null && duenos.length > 1) return 0.65;
+  }
+
+  return puntuacion;
 }
