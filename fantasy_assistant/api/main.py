@@ -125,6 +125,45 @@ def health(db: Session = Depends(get_db)) -> dict:
     return {"status": "ok", "jugadores_por_fuente": jugadores_por_fuente}
 
 
+@app.post("/admin/sync-diagnostico")
+def admin_sync_diagnostico(source: str = Query(...), limite: int = Query(default=5, le=20)) -> dict:
+    """Diagnóstico TEMPORAL: sincroniza una muestra pequeña de [limite]
+    jugadores de [source] y devuelve el error real de cada paso en la
+    propia respuesta HTTP — sin esto no hay forma de ver por qué el job
+    de fondo (jobs/sync_data.py --loop) se queda atascado en producción,
+    ya que Railway no expone sus logs sin login interactivo por CLI.
+    Quitar una vez diagnosticado el problema real."""
+    from fantasy_assistant.datasources import get_data_source
+
+    src = get_data_source(source)
+    try:
+        jugadores = src.get_all_players()
+    except Exception as e:
+        return {"paso": "get_all_players", "ok": False, "error": str(e), "tipo": type(e).__name__}
+
+    muestra = jugadores[:limite]
+    resultados = []
+    for p in muestra:
+        entrada: dict = {"id": p.id, "nombre": p.nombre}
+        try:
+            ph = src.get_player_price_history(p.id)
+            entrada["precio_history_ok"] = True
+            entrada["precio_history_len"] = len(ph)
+        except Exception as e:
+            entrada["precio_history_ok"] = False
+            entrada["precio_history_error"] = f"{type(e).__name__}: {e}"
+        try:
+            pth = src.get_player_points_history(p.id)
+            entrada["puntos_history_ok"] = True
+            entrada["puntos_history_len"] = len(pth)
+        except Exception as e:
+            entrada["puntos_history_ok"] = False
+            entrada["puntos_history_error"] = f"{type(e).__name__}: {e}"
+        resultados.append(entrada)
+
+    return {"total_mercado": len(jugadores), "muestra": resultados}
+
+
 # CDNs de foto conocidos de las fuentes soportadas (ver PlayerRecord.foto_url).
 # El proxy solo reenvía estos hosts para que no se convierta en un proxy
 # HTTP abierto a cualquier URL.
