@@ -39,6 +39,18 @@ Future<List<String>> reconocerTexto(String rutaImagen) async {
 /// y dejar fuera coincidencias demasiado débiles (ej. una sola letra
 /// suelta que el OCR haya confundido).
 List<CandidatoEscaneado> emparejarJugadores(List<String> lineasTexto, List<Player> jugadores) {
+  // Cuántos jugadores DISTINTOS del mercado tienen cada palabra en su
+  // nombre — "pedri" solo lo tiene un jugador (apodo único), pero
+  // "diego" lo comparten varios. Se usa para no aceptar una coincidencia
+  // de una sola palabra cuando esa palabra por sí sola no basta para
+  // identificar a un jugador concreto.
+  final duenosPorPalabra = <String, Set<String>>{};
+  for (final jugador in jugadores) {
+    for (final palabra in _normalizar(jugador.nombre).split(' ').where((p) => p.length >= 3)) {
+      duenosPorPalabra.putIfAbsent(palabra, () => {}).add(jugador.id);
+    }
+  }
+
   final candidatos = <String, CandidatoEscaneado>{};
 
   for (final linea in lineasTexto) {
@@ -47,7 +59,7 @@ List<CandidatoEscaneado> emparejarJugadores(List<String> lineasTexto, List<Playe
 
     for (final jugador in jugadores) {
       final nombreNormalizado = _normalizar(jugador.nombre);
-      final puntuacion = _puntuarCoincidencia(normalizada, nombreNormalizado);
+      final puntuacion = _puntuarCoincidencia(normalizada, nombreNormalizado, duenosPorPalabra);
       if (puntuacion < 0.6) continue;
 
       final existente = candidatos[jugador.id];
@@ -78,7 +90,11 @@ String _normalizar(String texto) {
 /// palabra coincidiera aunque el resto de la línea no tuviera nada que
 /// ver, y eso colaba apellidos comunes que aparecían por azar en texto de
 /// la interfaz (precios, menús, otros jugadores...) como falsos positivos.
-double _puntuarCoincidencia(String lineaNormalizada, String nombreNormalizado) {
+double _puntuarCoincidencia(
+  String lineaNormalizada,
+  String nombreNormalizado,
+  Map<String, Set<String>> duenosPorPalabra,
+) {
   if (lineaNormalizada == nombreNormalizado) return 1.0;
 
   // Ojo: NO asumir que lo que hay que buscar es el apellido (última
@@ -101,6 +117,17 @@ double _puntuarCoincidencia(String lineaNormalizada, String nombreNormalizado) {
   // palabra reconocida en la línea debe pertenecer al nombre, sin
   // ninguna palabra "extra" ajena a él.
   if (!palabrasLinea.every(palabrasNombre.contains)) return 0;
+
+  // Con UNA sola palabra coincidente (ej. solo se lee "Diego", sin
+  // apellido), esa palabra solo es prueba válida si identifica a un
+  // ÚNICO jugador del mercado — "Pedri" o "Raphinha" son apodos que no
+  // comparte nadie más, pero "Diego" lo llevan varios jugadores
+  // distintos, y ahí no hay forma de saber a cuál se refiere la
+  // captura: mejor no proponer ninguno que proponerlos todos.
+  if (palabrasLinea.length == 1) {
+    final duenos = duenosPorPalabra[palabrasLinea.first];
+    if (duenos != null && duenos.length > 1) return 0;
+  }
 
   // Cuanto más del nombre completo cubre la línea, más fiable — "Pedri"
   // contra "Pedri González" cubre la mitad del nombre (0.75 de
