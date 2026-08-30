@@ -18,10 +18,9 @@ EXPOSE 8000
 # Railway asigna el puerto público vía $PORT; si no está definida (ej. en
 # local con `docker run`), cae a 8000.
 #
-# El job de sincronización (jobs/sync_data.py --loop) corre en segundo
-# plano en el MISMO contenedor, junto a la API — sin él, la base de
-# datos de jugadores se queda vacía o con lo que se haya sembrado a mano
-# (ver DATABASE_URL arriba: SQLite sin volumen persistente, así que
-# además se resetea en cada despliegue). Sincroniza nada más arrancar y
-# luego cada 3h, para ambas fuentes (Biwenger y LaLiga Fantasy).
-CMD ["sh", "-c", "python -m fantasy_assistant.jobs.sync_data --loop & uvicorn fantasy_assistant.api.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+# La sincronización del mercado corre DENTRO del propio proceso de la
+# API (ver el BackgroundScheduler en api/main.py) — no como un segundo
+# proceso aparte. Lanzarla también aquí como proceso de shell separado
+# hacía que ambas fuentes escribieran a la vez en la misma BD SQLite
+# desde procesos distintos, lo que producía bloqueos silenciosos.
+CMD ["sh", "-c", "uvicorn fantasy_assistant.api.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

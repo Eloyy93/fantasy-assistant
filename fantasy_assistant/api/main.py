@@ -48,7 +48,7 @@ from fantasy_assistant.db.models import (
     TeamFormation,
     TeamPlayer,
 )
-from fantasy_assistant.jobs.sync_data import sync_once
+from fantasy_assistant.jobs.sync_data import sync_all_sources
 from fantasy_assistant.modules import bargain_detector, captain_advisor, price_predictor
 from fantasy_assistant.modules.lineup_optimizer import FORMACIONES, LineupError, optimize_lineup
 
@@ -74,26 +74,25 @@ app.add_middleware(
 _scheduler = BackgroundScheduler(timezone="UTC")
 
 
-def _sync_source(source_name: str) -> None:
-    sync_once(get_data_source(source_name))
-
-
 @app.on_event("startup")
 def _startup() -> None:
     init_db()
-    # Las dos fuentes se sincronizan por separado — si una falla (ej. LaLiga
-    # Fantasy caída), no bloquea a la otra. Arrancan escalonadas para no
-    # golpear las dos APIs externas a la vez.
-    now = dt.datetime.now(dt.timezone.utc)
-    for i, source_name in enumerate(SOURCES):
-        _scheduler.add_job(
-            _sync_source,
-            "interval",
-            hours=3,
-            args=[source_name],
-            id=f"sync_{source_name}",
-            next_run_time=now + dt.timedelta(seconds=i * 15),
-        )
+    # sync_all_sources() sincroniza AMBAS fuentes SECUENCIALMENTE, una
+    # detrás de otra — no en paralelo. Antes cada fuente era un job aparte
+    # arrancado con solo 15s de diferencia, así que sus sync corrían casi
+    # enteros al mismo tiempo en hilos distintos: dos escritores
+    # machacando la misma BD SQLite a la vez, y LaLiga Fantasy (más
+    # lenta, con peticiones por jugador) perdía sistemáticamente la
+    # contención de bloqueos frente a Biwenger — se veía como "0
+    # jugadores sincronizados durante 20+ min" aunque las peticiones de
+    # red en sí funcionaran bien.
+    _scheduler.add_job(
+        sync_all_sources,
+        "interval",
+        hours=3,
+        id="sync_all_sources",
+        next_run_time=dt.datetime.now(dt.timezone.utc),
+    )
     _scheduler.start()
 
 
