@@ -40,8 +40,49 @@
   <meta name="google-adsense-account" content="ca-pub-2987330970119801">
   <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-2987330970119801"
      crossorigin="anonymous"></script>
+
+  <style>
+    body { background: #0A0B0D; margin: 0; }
+    #contenido-inicial {
+      font-family: -apple-system, Roboto, Segoe UI, sans-serif;
+      color: #E7E9EA;
+      max-width: 640px;
+      margin: 0 auto;
+      padding: 32px 20px;
+    }
+    #contenido-inicial a { color: #2ecc9b; }
+  </style>
 </head>
 <body>
+  <!-- Contenido estático real, visible antes (y junto a) la app Flutter,
+       que se pinta sobre un <canvas> y por tanto no lleva texto legible
+       para rastreadores. Sin esto, AdSense ve una pantalla en blanco al
+       revisar el sitio y lo rechaza por "anuncios sin contenido del
+       editor". -->
+  <main id="contenido-inicial">
+    <h1>Master Fantasy</h1>
+    <p>
+      Master Fantasy es tu asistente para Biwenger y LaLiga Fantasy:
+      predicciones de precio de cada jugador, chollos del mercado,
+      recomendación de capitán y un optimizador que te arma la mejor
+      alineación posible según tu presupuesto y tu plantilla actual.
+    </p>
+    <h2>Qué puedes hacer con Master Fantasy</h2>
+    <ul>
+      <li>Consultar la evolución y predicción de precio de cualquier jugador de LaLiga.</li>
+      <li>Descubrir chollos: jugadores infravalorados con buena proyección de puntos.</li>
+      <li>Optimizar tu alineación automáticamente según formación y presupuesto.</li>
+      <li>Comparar jugadores entre sí antes de fichar.</li>
+      <li>Importar tu plantilla directamente desde una captura de Biwenger o LaLiga Fantasy.</li>
+      <li>Recibir notificaciones de subidas y bajadas de precio de tus jugadores.</li>
+    </ul>
+    <p>
+      Consulta nuestra <a href="legal/privacidad.html">política de privacidad</a>,
+      la <a href="legal/cookies.html">política de cookies</a> y el
+      <a href="legal/aviso-legal.html">aviso legal</a>.
+    </p>
+  </main>
+
   <!--
     You can customize the "flutter_bootstrap.js" script.
     This is useful to provide a custom configuration to the Flutter loader
@@ -51,5 +92,19 @@
     * https://docs.flutter.dev/platform-integration/web/initialization
   -->
   <script src="flutter_bootstrap.js" async></script>
+
+  <!-- En cuanto la app Flutter se monta (añade sus propios elementos
+       flt-* al body), ocultamos el contenido estático para que un
+       usuario real no vea las dos cosas a la vez. El contenido sigue
+       en el DOM (solo oculto), así que un rastreador lo sigue viendo. -->
+  <script>
+    new MutationObserver(function (mutations, observer) {
+      if (document.querySelector('flt-glass-pane, flutter-view')) {
+        var estatico = document.getElementById('contenido-inicial');
+        if (estatico) estatico.style.display = 'none';
+        observer.disconnect();
+      }
+    }).observe(document.body, { childList: true, subtree: true });
+  </script>
 </body>
 </html>
