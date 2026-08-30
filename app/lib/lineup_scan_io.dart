@@ -75,6 +75,7 @@ List<CandidatoEscaneado> emparejarJugadores(List<String> lineasTexto, List<Playe
     // en los casos donde la línea SÍ viene completa.
     Set<String> palabrasCompletas;
     String? prefijo;
+    String? inicial;
     if (todasLasPalabras.length == 1) {
       palabrasCompletas = todasLasPalabras.where((p) => p.length >= 4).toSet();
       prefijo = null;
@@ -82,9 +83,17 @@ List<CandidatoEscaneado> emparejarJugadores(List<String> lineasTexto, List<Playe
       final palabras = List<String>.from(todasLasPalabras);
       prefijo = palabras.removeLast();
       palabrasCompletas = palabras.where((p) => p.length >= 4).toSet();
+      // Una letra suelta antes del apellido (ej. "C. Romero") es casi
+      // siempre la inicial del nombre de pila abreviado — se descartaba
+      // como ruido, y con apellidos comunes (Romero, García...) eso deja
+      // pasar a TODOS los jugadores con ese apellido sin ningún filtro
+      // extra. Se usa como pista: el nombre del jugador tiene que tener
+      // alguna palabra que empiece por esa letra.
+      final iniciales = palabras.where((p) => p.length == 1).toList();
+      if (iniciales.length == 1) inicial = iniciales.first;
     }
 
-    final compatibles = _buscarCompatibles(palabrasCompletas, prefijo, jugadores, palabrasPorJugador);
+    final compatibles = _buscarCompatibles(palabrasCompletas, prefijo, inicial, jugadores, palabrasPorJugador);
     if (compatibles.isEmpty) continue;
 
     final cubiertas = palabrasCompletas.length + (prefijo != null ? 1 : 0);
@@ -115,11 +124,14 @@ List<CandidatoEscaneado> emparejarJugadores(List<String> lineasTexto, List<Playe
 
 /// Jugadores del mercado compatibles con las palabras reconocidas: cada
 /// palabra de [palabrasCompletas] tiene que ser una palabra real de su
-/// nombre, y si hay [prefijo], el nombre tiene que tener alguna palabra
-/// que empiece por él.
+/// nombre, si hay [prefijo] el nombre tiene que tener alguna palabra que
+/// empiece por él, y si hay [inicial] (letra suelta del nombre de pila
+/// abreviado) el nombre tiene que tener alguna palabra que empiece por
+/// esa letra.
 List<Player> _buscarCompatibles(
   Set<String> palabrasCompletas,
   String? prefijo,
+  String? inicial,
   List<Player> jugadores,
   Map<String, List<String>> palabrasPorJugador,
 ) {
@@ -131,6 +143,7 @@ List<Player> _buscarCompatibles(
     final nombreSet = palabrasNombre.toSet();
     if (!palabrasCompletas.every(nombreSet.contains)) continue;
     if (prefijo != null && !palabrasNombre.any((w) => w.startsWith(prefijo))) continue;
+    if (inicial != null && !palabrasNombre.any((w) => w.startsWith(inicial))) continue;
     compatibles.add(jugador);
   }
   return compatibles;
