@@ -12,7 +12,6 @@ import logging
 import random
 
 from sqlalchemy import select
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
 from fantasy_assistant.config import config
 from fantasy_assistant.datasources import SOURCES, get_data_source
@@ -215,9 +214,28 @@ def _detectar_y_notificar_chollos(session, source: str) -> None:
     logger.info("%d chollo(s) nuevo(s) en %s, notificados a %d dispositivos", len(nuevos), source, len(tokens))
 
 
+def _insert_para(session) -> type:
+    """`insert()` del dialecto ON CONFLICT que corresponda a la BD real
+    detrás de esta sesión — antes esto estaba fijado a SQLite (import a
+    nivel de módulo), así que cada upsert de esta función fallaba en
+    silencio en cuanto la BD pasó a ser Postgres (Neon): el INSERT ...
+    ON CONFLICT de SQLite no es SQL válido para Postgres, la excepción la
+    capturaba el try/except por-jugador de sync_once() como si fuera un
+    fallo de red cualquiera, y ningún jugador llegaba a comitearse — sin
+    ningún error visible fuera de los logs de Railway."""
+    dialecto = session.bind.dialect.name
+    if dialecto == "postgresql":
+        from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+        return pg_insert
+    from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+
+    return sqlite_insert
+
+
 def _upsert_price_snapshot(session, player_id: str, source: str, fecha: dt.date, precio: int) -> None:
     stmt = (
-        sqlite_insert(PriceHistory)
+        _insert_para(session)(PriceHistory)
         .values(player_id=player_id, source=source, fecha=fecha, precio=precio)
         .on_conflict_do_update(
             index_elements=["player_id", "fecha"],
@@ -229,7 +247,7 @@ def _upsert_price_snapshot(session, player_id: str, source: str, fecha: dt.date,
 
 def _upsert_points(session, player_id: str, source: str, jornada: int, puntos: int) -> None:
     stmt = (
-        sqlite_insert(PointsHistory)
+        _insert_para(session)(PointsHistory)
         .values(player_id=player_id, source=source, jornada=jornada, puntos=puntos)
         .on_conflict_do_update(
             index_elements=["player_id", "jornada"],
