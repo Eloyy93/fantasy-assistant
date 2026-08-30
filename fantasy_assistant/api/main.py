@@ -167,6 +167,53 @@ def admin_sync_diagnostico(source: str = Query(...), limite: int = Query(default
     return {"total_mercado": len(jugadores), "muestra": resultados}
 
 
+@app.post("/admin/sync-write-diagnostico")
+def admin_sync_write_diagnostico(
+    source: str = Query(...), limite: int = Query(default=3, le=10), db: Session = Depends(get_db)
+) -> dict:
+    """Diagnóstico TEMPORAL: intenta escribir en la BD real (a diferencia
+    de /admin/sync-diagnostico, que solo prueba la fuente externa) para un
+    puñado de jugadores, devolviendo el error real de cada paso — el job
+    de sync programado (sync_all_sources) solo LOGUEA sus fallos, no los
+    expone en ningún sitio que se pueda consultar sin acceso a los logs de
+    Railway."""
+    from fantasy_assistant.datasources import get_data_source
+
+    src = get_data_source(source)
+    try:
+        jugadores = src.get_all_players()[:limite]
+    except Exception as e:
+        return {"paso": "get_all_players", "ok": False, "error": f"{type(e).__name__}: {e}"}
+
+    resultados = []
+    for p in jugadores:
+        entrada: dict = {"id": p.id, "nombre": p.nombre}
+        try:
+            record_id = f"{p.source}:{p.id}"
+            existing = db.get(PlayerRecord, record_id)
+            if existing:
+                existing.nombre = p.nombre
+                existing.equipo = p.equipo
+                existing.posicion = p.posicion
+                existing.precio = p.precio
+            else:
+                db.add(
+                    PlayerRecord(
+                        id=record_id, source=p.source, external_id=p.id,
+                        nombre=p.nombre, equipo=p.equipo, posicion=p.posicion, precio=p.precio,
+                    )
+                )
+            db.commit()
+            entrada["ok"] = True
+        except Exception as e:
+            db.rollback()
+            entrada["ok"] = False
+            entrada["error"] = f"{type(e).__name__}: {e}"
+        resultados.append(entrada)
+
+    return {"resultados": resultados}
+
+
 # CDNs de foto conocidos de las fuentes soportadas (ver PlayerRecord.foto_url).
 # El proxy solo reenvía estos hosts para que no se convierta en un proxy
 # HTTP abierto a cualquier URL.
