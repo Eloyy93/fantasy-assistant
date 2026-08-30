@@ -186,6 +186,27 @@ def admin_sync_diagnostico(source: str = Query(...), limite: int = Query(default
     return {"total_mercado": len(jugadores), "muestra": resultados}
 
 
+@app.post("/admin/sync-real-diagnostico")
+def admin_sync_real_diagnostico(source: str = Query(...), limite: int = Query(default=10, le=50)) -> dict:
+    """Diagnóstico TEMPORAL: ejecuta la función REAL sync_once() (la misma
+    que usa el scheduler programado) pero limitada a [limite] jugadores —
+    para ver si se cuelga o falla igual que el sync completo sin tener que
+    esperar horas ni adivinar por qué el job en segundo plano no progresa."""
+    from fantasy_assistant.datasources import get_data_source
+    from fantasy_assistant.jobs.sync_data import sync_once
+
+    src = get_data_source(source)
+    original = src.get_all_players
+    src.get_all_players = lambda: original()[:limite]
+    try:
+        n = sync_once(src)
+        return {"ok": True, "sincronizados": n}
+    except Exception as e:
+        return {"ok": False, "error": f"{type(e).__name__}: {e}"}
+    finally:
+        src.get_all_players = original
+
+
 @app.post("/admin/sync-write-diagnostico")
 def admin_sync_write_diagnostico(
     source: str = Query(...), limite: int = Query(default=3, le=10), db: Session = Depends(get_db)
