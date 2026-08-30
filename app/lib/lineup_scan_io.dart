@@ -39,12 +39,14 @@ Future<List<String>> reconocerTexto(String rutaImagen) async {
 /// y dejar fuera coincidencias demasiado débiles (ej. una sola letra
 /// suelta que el OCR haya confundido).
 ///
-/// LaLiga Fantasy y Biwenger truncan los nombres que no caben en la
-/// etiqueta bajo la foto, con puntos suspensivos: "Diego Co...", "Rubén
-/// G...". La última palabra de esas líneas no es una palabra completa —
-/// es un PREFIJO cortado a mitad — así que se trata de forma distinta:
-/// no tiene que coincidir exacta, solo tiene que ser el principio de
-/// alguna palabra del nombre.
+/// LaLiga Fantasy y Biwenger acortan los nombres que no caben en la
+/// etiqueta bajo la foto — a veces con puntos suspensivos visibles
+/// ("Diego Co...", "Rubén G..."), a veces sin ellos ("A. Alti" por
+/// "Altimira"). En líneas de dos o más palabras, la ÚLTIMA se trata
+/// siempre como un PREFIJO en vez de exigir que sea una palabra
+/// completa — una palabra completa también "empieza por sí misma", así
+/// que esto cubre el caso truncado sin perder precisión en el caso
+/// normal.
 List<CandidatoEscaneado> emparejarJugadores(List<String> lineasTexto, List<Player> jugadores) {
   // Palabras del nombre (>=3 letras) de cada jugador, precalculadas una
   // sola vez.
@@ -55,44 +57,40 @@ List<CandidatoEscaneado> emparejarJugadores(List<String> lineasTexto, List<Playe
   final candidatos = <String, CandidatoEscaneado>{};
 
   for (final lineaOriginal in lineasTexto) {
-    final truncada = _terminaTruncada(lineaOriginal);
     final normalizada = _normalizar(_quitarPuntosSuspensivos(lineaOriginal));
     if (normalizada.length < 3) continue;
 
     final todasLasPalabras = normalizada.split(' ').where((p) => p.isNotEmpty).toList();
     if (todasLasPalabras.isEmpty) continue;
 
-    // Si la línea viene truncada, la última palabra reconocida puede
-    // estar cortada — se separa y se trata como prefijo. El resto tiene
-    // que ser palabras completas (mínimo 4 letras, para filtrar ruido
-    // del OCR de interfaces tan visuales).
-    final prefijoTruncado = truncada ? todasLasPalabras.removeLast() : null;
-    final palabrasCompletas = todasLasPalabras.where((p) => p.length >= 4).toSet();
-    // Un prefijo cortado por sí solo, sin ninguna palabra completa que
-    // sirva de ancla (ej. la línea era literalmente solo "Co..."), es
-    // demasiado débil — cualquier apellido que empiece por esas letras
-    // colaría. Solo se usa junto con al menos una palabra completa.
-    if (palabrasCompletas.isEmpty) continue;
-
-    // Todos los jugadores del mercado compatibles con esta línea: cada
-    // palabra completa tiene que ser una palabra real de su nombre (sin
-    // ninguna ajena), y si hay prefijo truncado, el nombre tiene que
-    // tener alguna palabra que empiece por él.
-    final compatibles = <Player>[];
-    for (final jugador in jugadores) {
-      final palabrasNombre = palabrasPorJugador[jugador.id]!;
-      if (palabrasNombre.isEmpty) continue;
-      final nombreSet = palabrasNombre.toSet();
-      if (!palabrasCompletas.every(nombreSet.contains)) continue;
-      if (prefijoTruncado != null && !palabrasNombre.any((w) => w.startsWith(prefijoTruncado))) continue;
-      compatibles.add(jugador);
+    // Con una sola palabra en la línea, se exige que sea una palabra
+    // COMPLETA del nombre (ej. "Pedri", "Suazo") — con una sola palabra
+    // no hay ancla de apoyo, así que tratarla como prefijo sería
+    // demasiado débil (colaría cualquier nombre que empezara por esas
+    // letras). Con dos o más palabras, la ÚLTIMA se trata siempre como
+    // PREFIJO en vez de palabra completa — cubre tanto el truncamiento
+    // visible ("Diego Co...") como las abreviaturas sin puntos
+    // suspensivos ("A. Alti" por "Altimira"); una palabra completa
+    // también "empieza por sí misma", así que esto no pierde precisión
+    // en los casos donde la línea SÍ viene completa.
+    Set<String> palabrasCompletas;
+    String? prefijo;
+    if (todasLasPalabras.length == 1) {
+      palabrasCompletas = todasLasPalabras.where((p) => p.length >= 4).toSet();
+      prefijo = null;
+    } else {
+      final palabras = List<String>.from(todasLasPalabras);
+      prefijo = palabras.removeLast();
+      palabrasCompletas = palabras.where((p) => p.length >= 4).toSet();
     }
+
+    final compatibles = _buscarCompatibles(palabrasCompletas, prefijo, jugadores, palabrasPorJugador);
     if (compatibles.isEmpty) continue;
 
+    final cubiertas = palabrasCompletas.length + (prefijo != null ? 1 : 0);
     for (final jugador in compatibles) {
       final palabrasNombre = palabrasPorJugador[jugador.id]!;
       final nombreCompletoNormalizado = palabrasNombre.join(' ');
-      final cubiertas = palabrasCompletas.length + (prefijoTruncado != null ? 1 : 0);
       var puntuacion = normalizada == nombreCompletoNormalizado
           ? 1.0
           : (0.5 + 0.5 * (cubiertas / palabrasNombre.length)).clamp(0.0, 1.0);
@@ -115,9 +113,27 @@ List<CandidatoEscaneado> emparejarJugadores(List<String> lineasTexto, List<Playe
   return lista;
 }
 
-bool _terminaTruncada(String texto) {
-  final t = texto.trim();
-  return t.endsWith('...') || t.endsWith('…');
+/// Jugadores del mercado compatibles con las palabras reconocidas: cada
+/// palabra de [palabrasCompletas] tiene que ser una palabra real de su
+/// nombre, y si hay [prefijo], el nombre tiene que tener alguna palabra
+/// que empiece por él.
+List<Player> _buscarCompatibles(
+  Set<String> palabrasCompletas,
+  String? prefijo,
+  List<Player> jugadores,
+  Map<String, List<String>> palabrasPorJugador,
+) {
+  if (palabrasCompletas.isEmpty && (prefijo == null || prefijo.length < 3)) return const [];
+  final compatibles = <Player>[];
+  for (final jugador in jugadores) {
+    final palabrasNombre = palabrasPorJugador[jugador.id]!;
+    if (palabrasNombre.isEmpty) continue;
+    final nombreSet = palabrasNombre.toSet();
+    if (!palabrasCompletas.every(nombreSet.contains)) continue;
+    if (prefijo != null && !palabrasNombre.any((w) => w.startsWith(prefijo))) continue;
+    compatibles.add(jugador);
+  }
+  return compatibles;
 }
 
 String _quitarPuntosSuspensivos(String texto) {
