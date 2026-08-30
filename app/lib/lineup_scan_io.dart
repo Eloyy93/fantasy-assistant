@@ -71,10 +71,13 @@ String _normalizar(String texto) {
   return resultado.replaceAll(RegExp(r'[^a-z0-9 ]'), ' ').replaceAll(RegExp(r'\s+'), ' ').trim();
 }
 
-/// 0..1 — coincidencia exacta de la línea completa puntúa más que un
-/// coincidencia parcial de una sola palabra encontrada dentro de un
-/// nombre completo más largo, que a su vez puntúa más que no encontrar
-/// nada.
+/// 0..1 — coincidencia EXACTA: toda palabra reconocida en la línea tiene
+/// que ser una palabra real del nombre del jugador, sin excepción. Si la
+/// línea trae aunque sea una palabra que no pertenece al nombre, se
+/// descarta entera y no cuenta como candidato. Antes bastaba con que UNA
+/// palabra coincidiera aunque el resto de la línea no tuviera nada que
+/// ver, y eso colaba apellidos comunes que aparecían por azar en texto de
+/// la interfaz (precios, menús, otros jugadores...) como falsos positivos.
 double _puntuarCoincidencia(String lineaNormalizada, String nombreNormalizado) {
   if (lineaNormalizada == nombreNormalizado) return 1.0;
 
@@ -91,27 +94,17 @@ double _puntuarCoincidencia(String lineaNormalizada, String nombreNormalizado) {
   // real del jugador, y una palabra de 3 letras suelta tiene bastante
   // más probabilidad de ser basura del OCR que de ser parte real de un
   // nombre.
-  final palabrasLinea = lineaNormalizada.split(' ').where((p) => p.length >= 4).toList();
+  final palabrasLinea = lineaNormalizada.split(' ').where((p) => p.length >= 4).toSet();
   if (palabrasLinea.isEmpty) return 0;
 
-  final coincidencias = palabrasLinea.where(palabrasNombre.contains).length;
-  if (coincidencias == 0) return 0;
+  // palabrasLinea tiene que ser subconjunto de palabrasNombre: cada
+  // palabra reconocida en la línea debe pertenecer al nombre, sin
+  // ninguna palabra "extra" ajena a él.
+  if (!palabrasLinea.every(palabrasNombre.contains)) return 0;
 
-  // Cuanto más de la línea reconocida está cubierta por el nombre, y
-  // cuanto más del nombre está cubierto por la línea, más fiable la
-  // coincidencia — así "Fermin" contra "Fermín López" puntúa alto (cubre
-  // toda la línea) sin necesitar el apellido completo.
-  final ratioLinea = coincidencias / palabrasLinea.length;
-  final ratioNombre = coincidencias / palabrasNombre.length;
-
-  // Con un nombre de varias palabras (ej. "Fermín López"), una sola
-  // palabra suelta solo es prueba suficiente si ES la línea entera
-  // (ratioLinea 1.0, como cuando Biwenger muestra solo "Fermín" bajo la
-  // foto) — si la línea trae además OTRAS palabras que no coinciden con
-  // nada del nombre, esa única coincidencia es demasiado débil: apellidos
-  // comunes aparecen por azar en texto de la interfaz sin relación
-  // (precios, menús, otros jugadores...) y ahí sí queremos descartarlo.
-  if (palabrasNombre.length > 1 && coincidencias == 1 && ratioLinea < 1.0) return 0;
-
-  return (0.5 * ratioLinea + 0.5 * ratioNombre).clamp(0.0, 1.0);
+  // Cuanto más del nombre completo cubre la línea, más fiable — "Pedri"
+  // contra "Pedri González" cubre la mitad del nombre (0.75 de
+  // confianza); el nombre completo cubre el 100% (1.0).
+  final ratioNombre = palabrasLinea.length / palabrasNombre.length;
+  return (0.5 + 0.5 * ratioNombre).clamp(0.0, 1.0);
 }
