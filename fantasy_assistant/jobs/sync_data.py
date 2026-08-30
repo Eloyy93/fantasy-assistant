@@ -15,7 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
 from fantasy_assistant.config import config
-from fantasy_assistant.datasources import get_data_source
+from fantasy_assistant.datasources import SOURCES, get_data_source
 from fantasy_assistant.datasources.base import FantasyDataSource, Player
 from fantasy_assistant.db.database import get_session, init_db
 from fantasy_assistant.db.models import (
@@ -239,12 +239,23 @@ def _upsert_points(session, player_id: str, source: str, jornada: int, puntos: i
     session.execute(stmt)
 
 
+def sync_all_sources() -> None:
+    """Sincroniza TODAS las fuentes soportadas (Biwenger y LaLiga Fantasy),
+    no solo la de FANTASY_SOURCE — la app deja elegir la fuente desde la
+    pestaña de "Mi plantilla", así que ambas necesitan datos reales."""
+    for nombre in SOURCES:
+        try:
+            sync_once(get_data_source(nombre))
+        except Exception:
+            logger.exception("Fallo sincronizando la fuente %s — se salta y se sigue con las demás", nombre)
+
+
 def run_scheduler() -> None:
     from apscheduler.schedulers.blocking import BlockingScheduler
 
     scheduler = BlockingScheduler(timezone="UTC")
-    scheduler.add_job(sync_once, "interval", hours=3, next_run_time=dt.datetime.now(dt.timezone.utc))
-    logger.info("Scheduler iniciado: sincronización cada 3h")
+    scheduler.add_job(sync_all_sources, "interval", hours=3, next_run_time=dt.datetime.now(dt.timezone.utc))
+    logger.info("Scheduler iniciado: sincronización cada 3h (todas las fuentes: %s)", ", ".join(SOURCES))
     scheduler.start()
 
 
