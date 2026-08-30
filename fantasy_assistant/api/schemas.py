@@ -137,6 +137,17 @@ class FormationOut(BaseModel):
     formacion: str
 
 
+class AccountOut(BaseModel):
+    id: str
+    email: str | None = None
+    nombre: str | None = None
+    foto_url: str | None = None
+
+
+class VincularDispositivoIn(BaseModel):
+    device_id: str
+
+
 class ComparePlayerOut(BaseModel):
     id: str
     source: str

@@ -67,7 +67,7 @@ def _puntos_esperados_por_jugador(session, source: str, player_ids: list[str]) -
     return {pid: sum(vals) / len(vals) for pid, vals in por_jugador.items() if vals}
 
 
-def recomendar_capitan(session, device_id: str, source: str) -> list[CaptainCandidate]:
+def recomendar_capitan(session, owner_id: str, source: str) -> list[CaptainCandidate]:
     """Candidatos a capitán ordenados de más a menos recomendable.
     Solo tiene en cuenta jugadores colocados en el campo (slot != None) —
     un suplente en el banquillo no puede llevar el brazalete."""
@@ -75,7 +75,7 @@ def recomendar_capitan(session, device_id: str, source: str) -> list[CaptainCand
         select(TeamPlayer.player_id)
         .join(PlayerRecord, PlayerRecord.id == TeamPlayer.player_id)
         .where(
-            TeamPlayer.device_id == device_id,
+            TeamPlayer.owner_id == owner_id,
             TeamPlayer.slot.is_not(None),
             PlayerRecord.source == source,
         )

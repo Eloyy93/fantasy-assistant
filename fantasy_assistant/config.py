@@ -17,10 +17,27 @@ def _float_env(name: str, default: float) -> float:
     return float(value) if value else default
 
 
+def _normalizar_database_url(url: str) -> str:
+    """Neon (y la mayoría de proveedores) dan la URL como `postgresql://`,
+    que SQLAlchemy resuelve por defecto al driver psycopg2 — pero el
+    driver instalado en este proyecto es psycopg (v3, ver
+    requirements.txt). Se reescribe al esquema `postgresql+psycopg://`
+    para que use el driver correcto sin tener que acordarse de pegar la
+    URL "bien" cada vez que se configura en un sitio nuevo (Railway,
+    local, etc.)."""
+    if url.startswith("postgresql://") or url.startswith("postgres://"):
+        return url.replace("postgresql://", "postgresql+psycopg://", 1).replace(
+            "postgres://", "postgresql+psycopg://", 1
+        )
+    return url
+
+
 @dataclass(frozen=True)
 class Config:
     fantasy_source: str = field(default_factory=lambda: os.getenv("FANTASY_SOURCE", "biwenger").lower())
-    database_url: str = field(default_factory=lambda: os.getenv("DATABASE_URL", "sqlite:///fantasy_assistant.db"))
+    database_url: str = field(
+        default_factory=lambda: _normalizar_database_url(os.getenv("DATABASE_URL", "sqlite:///fantasy_assistant.db"))
+    )
 
     biwenger_email: str = field(default_factory=lambda: os.getenv("BIWENGER_EMAIL", ""))
     biwenger_password: str = field(default_factory=lambda: os.getenv("BIWENGER_PASSWORD", ""))

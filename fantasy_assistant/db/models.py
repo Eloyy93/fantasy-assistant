@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from sqlalchemy import Boolean, Date, ForeignKey, Integer, String, UniqueConstraint
+import datetime as dt
+
+from sqlalchemy import Boolean, DateTime, Date, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -101,11 +103,31 @@ class DeviceSubscription(Base):
     __table_args__ = (UniqueConstraint("fcm_token", "player_id", name="uq_subscription_device_player"),)
 
 
+class User(Base):
+    """Cuenta de usuario, creada/actualizada (upsert) la primera vez que
+    llega un token de Google válido — `id` es el UID de Firebase, no se
+    genera aquí. Iniciar sesión es opcional: quien no lo hace sigue
+    identificado solo por su device_id (ver `owner_id` en TeamPlayer)."""
+
+    __tablename__ = "users"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    email: Mapped[str | None] = mapped_column(String, nullable=True)
+    nombre: Mapped[str | None] = mapped_column(String, nullable=True)
+    foto_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    creado_en: Mapped[dt.datetime] = mapped_column(DateTime, default=dt.datetime.utcnow)
+
+
 class TeamPlayer(Base):
     """Jugador que el usuario ha colocado en "Mi plantilla" desde la app.
-    Identificado por un device_id local generado por la app (no el token
-    FCM), para que gestionar la plantilla no dependa de tener las
-    notificaciones activadas.
+
+    `owner_id` identifica a quién pertenece la plantilla — es un string con
+    prefijo, `device:<uuid>` mientras no haya iniciado sesión (el uuid es
+    el device_id local generado por la app) o `user:<firebase_uid>` una vez
+    ha iniciado sesión con Google. Así el mismo campo sirve para los dos
+    casos sin necesitar una columna aparte ni lógica de fusión: iniciar
+    sesión con datos ya guardados en el dispositivo simplemente reasigna
+    las filas de `device:X` a `user:Y` (ver POST /account/vincular-dispositivo).
 
     `slot` es la posición exacta dentro de la formación elegida (ej.
     "DEF2"), al estilo Futbin/Ultimate Team — null si el jugador está en la
@@ -123,34 +145,35 @@ class TeamPlayer(Base):
     __tablename__ = "team_players"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    device_id: Mapped[str] = mapped_column(String, index=True)
+    owner_id: Mapped[str] = mapped_column(String, index=True)
     player_id: Mapped[str] = mapped_column(ForeignKey("players.id"), index=True)
     source: Mapped[str] = mapped_column(String, index=True)
     slot: Mapped[str | None] = mapped_column(String, nullable=True)
 
     __table_args__ = (
-        UniqueConstraint("device_id", "player_id", name="uq_team_device_player"),
+        UniqueConstraint("owner_id", "player_id", name="uq_team_owner_player"),
         # SQLite trata cada NULL como distinto en un UNIQUE, así que varios
-        # jugadores sin colocar (slot=NULL) del mismo device_id conviven sin
+        # jugadores sin colocar (slot=NULL) del mismo owner_id conviven sin
         # problema — el UNIQUE solo se aplica de verdad entre huecos reales.
         # Incluye `source` para que el mismo nombre de slot en fuentes
         # distintas no choque (ver docstring de la clase).
-        UniqueConstraint("device_id", "slot", "source", name="uq_team_device_slot_source"),
+        UniqueConstraint("owner_id", "slot", "source", name="uq_team_owner_slot_source"),
     )
 
 
 class TeamFormation(Base):
     """Formación elegida por el usuario para "Mi plantilla", por fuente
-    (Biwenger y LaLiga Fantasy pueden tener formaciones distintas)."""
+    (Biwenger y LaLiga Fantasy pueden tener formaciones distintas).
+    `owner_id`: ver docstring de TeamPlayer."""
 
     __tablename__ = "team_formations"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    device_id: Mapped[str] = mapped_column(String, index=True)
+    owner_id: Mapped[str] = mapped_column(String, index=True)
     source: Mapped[str] = mapped_column(String)
     formacion: Mapped[str] = mapped_column(String)
 
-    __table_args__ = (UniqueConstraint("device_id", "source", name="uq_formation_device_source"),)
+    __table_args__ = (UniqueConstraint("owner_id", "source", name="uq_formation_owner_source"),)
 
 
 class BargainState(Base):

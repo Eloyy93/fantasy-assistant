@@ -10,7 +10,9 @@ import 'package:image_picker/image_picker.dart';
 import 'adsense_sidebar.dart';
 import 'ads_service.dart';
 import 'api_client.dart';
+import 'auth_service.dart';
 import 'device_id.dart';
+import 'firebase_options.dart';
 import 'history_charts.dart';
 import 'legal_links.dart';
 import 'lineup_scan.dart';
@@ -23,12 +25,20 @@ import 'theme.dart';
 /// hasta que _setupPushNotifications() termine (o si Firebase falla).
 String? currentFcmToken;
 
-Future<void> _setupPushNotifications() async {
-  // Firebase no está configurado para web (requeriría FlutterFire CLI +
-  // credenciales propias del proyecto web) — la versión web funciona sin
-  // notificaciones push, el resto de la app no depende de ellas.
-  if (kIsWeb) return;
+/// Inicializa Firebase en todas las plataformas (antes solo se hacía en
+/// Android) — el login con Google lo necesita también en web. Las
+/// notificaciones push siguen siendo solo Android (requerirían un service
+/// worker aparte en web, fuera de alcance).
+Future<void> _initFirebase() async {
+  if (kIsWeb) {
+    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+    return;
+  }
   await Firebase.initializeApp();
+  await _setupPushNotifications();
+}
+
+Future<void> _setupPushNotifications() async {
   final messaging = FirebaseMessaging.instance;
 
   await messaging.requestPermission();
@@ -68,7 +78,7 @@ void main() {
     print('[PlatformDispatcher] $error\n$stack');
     return true;
   };
-  unawaited(_setupPushNotifications());
+  unawaited(_initFirebase());
   unawaited(initAds());
   unawaited(PurchaseService.instance.init());
   runApp(const FantasyAssistantApp());
@@ -198,6 +208,12 @@ class _DesktopShellState extends State<DesktopShell> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      TextButton.icon(
+                        onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AccountScreen())),
+                        icon: const Icon(Icons.account_circle_rounded, size: 18, color: kTextSecondary),
+                        label: const Text('Cuenta', style: TextStyle(fontSize: 13, color: kTextSecondary)),
+                      ),
+                      const SizedBox(height: 4),
                       TextButton(onPressed: abrirPrivacidad, child: const Text('Privacidad', style: TextStyle(fontSize: 12, color: kTextTertiary))),
                       TextButton(onPressed: abrirCookies, child: const Text('Cookies', style: TextStyle(fontSize: 12, color: kTextTertiary))),
                       TextButton(onPressed: abrirAvisoLegal, child: const Text('Aviso legal', style: TextStyle(fontSize: 12, color: kTextTertiary))),
@@ -308,6 +324,8 @@ class _PlayerSearchScreenState extends State<PlayerSearchScreen> {
                   tooltip: 'Menú',
                   onSelected: (opcion) {
                     switch (opcion) {
+                      case 'cuenta':
+                        Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AccountScreen()));
                       case 'plantilla':
                         Navigator.of(context).push(MaterialPageRoute(builder: (_) => TeamScreen(api: _api)));
                       case 'optimizador':
@@ -331,6 +349,15 @@ class _PlayerSearchScreenState extends State<PlayerSearchScreen> {
                     }
                   },
                   itemBuilder: (context) => [
+                    const PopupMenuItem(
+                      value: 'cuenta',
+                      child: ListTile(
+                        leading: Icon(Icons.account_circle_rounded),
+                        title: Text('Cuenta'),
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                    ),
+                    const PopupMenuDivider(),
                     const PopupMenuItem(
                       value: 'plantilla',
                       child: ListTile(
@@ -785,6 +812,150 @@ class _CompareTable extends StatelessWidget {
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Pantalla de cuenta: iniciar/cerrar sesión con Google. Iniciar sesión es
+/// opcional — sin hacerlo la app sigue funcionando igual que siempre con
+/// el device_id local (ver device_id.dart); la diferencia es que, con
+/// sesión iniciada, "Mi plantilla" se guarda contra la cuenta y aparece
+/// igual en cualquier otro dispositivo/navegador donde se inicie sesión
+/// con el mismo Google.
+class AccountScreen extends StatefulWidget {
+  const AccountScreen({super.key});
+
+  @override
+  State<AccountScreen> createState() => _AccountScreenState();
+}
+
+class _AccountScreenState extends State<AccountScreen> {
+  final _api = FantasyApiClient();
+  bool _procesando = false;
+  String? _error;
+
+  Future<void> _iniciarSesion() async {
+    setState(() {
+      _procesando = true;
+      _error = null;
+    });
+    try {
+      final usuario = await AuthService.instance.iniciarSesionConGoogle();
+      if (usuario == null) return; // el usuario canceló el diálogo
+
+      // Si el dispositivo ya tenía plantilla guardada sin sesión, se
+      // ofrece vincularla a la cuenta recién iniciada — una sola vez.
+      final deviceId = await getDeviceId();
+      final teniaPlantilla = (await _api.getTeam(deviceId)).isNotEmpty;
+      if (teniaPlantilla && mounted) {
+        final vincular = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('¿Vincular tu plantilla?'),
+            content: const Text(
+              'Este dispositivo ya tenía una plantilla guardada. '
+              '¿Quieres asociarla a tu cuenta de Google para verla también '
+              'en otros dispositivos? Si tu cuenta ya tiene una plantilla '
+              'propia, esta no la sobrescribirá.',
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Ahora no')),
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: const Text('Vincular', style: TextStyle(color: kMintAccent)),
+              ),
+            ],
+          ),
+        );
+        if (vincular == true) {
+          await _api.vincularDispositivo(deviceId);
+        }
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = 'No se pudo iniciar sesión: $e');
+    } finally {
+      if (mounted) setState(() => _procesando = false);
+    }
+  }
+
+  Future<void> _cerrarSesion() async {
+    setState(() => _procesando = true);
+    try {
+      await AuthService.instance.cerrarSesion();
+    } finally {
+      if (mounted) setState(() => _procesando = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Cuenta')),
+      body: DesktopContainer(
+        child: StreamBuilder(
+          stream: AuthService.instance.cambiosDeSesion,
+          builder: (context, snapshot) {
+            final usuario = snapshot.data;
+            return ListView(
+              padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
+              children: [
+                if (usuario == null) ...[
+                  const Text(
+                    'Inicia sesión con Google para que tu plantilla y tus '
+                    'ajustes se guarden en tu cuenta y aparezcan igual en '
+                    'el móvil y en la web. Es opcional: sin iniciar sesión '
+                    'la app sigue funcionando igual que siempre.',
+                    style: TextStyle(color: kTextSecondary, fontSize: 14),
+                  ),
+                  const SizedBox(height: 24),
+                  if (_error != null) ...[
+                    Text(_error!, style: const TextStyle(color: Colors.redAccent)),
+                    const SizedBox(height: 12),
+                  ],
+                  FilledButton.icon(
+                    onPressed: _procesando ? null : _iniciarSesion,
+                    icon: _procesando
+                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.login_rounded),
+                    label: const Text('Continuar con Google'),
+                  ),
+                ] else ...[
+                  Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 28,
+                        backgroundImage: usuario.photoURL != null ? NetworkImage(usuario.photoURL!) : null,
+                        child: usuario.photoURL == null ? const Icon(Icons.person_rounded) : null,
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              usuario.displayName ?? 'Sesión iniciada',
+                              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                            ),
+                            if (usuario.email != null)
+                              Text(usuario.email!, style: const TextStyle(color: kTextSecondary, fontSize: 13)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  OutlinedButton.icon(
+                    onPressed: _procesando ? null : _cerrarSesion,
+                    icon: const Icon(Icons.logout_rounded),
+                    label: const Text('Cerrar sesión'),
+                  ),
+                ],
+              ],
+            );
+          },
+        ),
       ),
     );
   }

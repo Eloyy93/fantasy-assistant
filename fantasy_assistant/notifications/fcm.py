@@ -19,14 +19,18 @@ _firebase_app = None
 _init_attempted = False
 
 
-def _get_app():
+def get_firebase_app():
+    """Inicializa (una sola vez, perezosamente) la app de Firebase Admin —
+    la reutilizan tanto el envío de push aquí como la verificación de
+    tokens de Google Sign-In en `fantasy_assistant.auth`, ya que solo puede
+    existir una app por defecto en el proceso."""
     global _firebase_app, _init_attempted
     if _firebase_app is not None or _init_attempted:
         return _firebase_app
     _init_attempted = True
 
     if not config.firebase_credentials_json and not config.firebase_credentials_path:
-        logger.warning("Firebase no configurado (FIREBASE_CREDENTIALS_JSON/_PATH) — push desactivado")
+        logger.warning("Firebase no configurado (FIREBASE_CREDENTIALS_JSON/_PATH) — push y login con Google desactivados")
         return None
 
     import firebase_admin
@@ -45,7 +49,7 @@ def send_alerts(alerts: list[Alert], device_tokens: list[str]) -> list[str]:
     """Envía cada alerta a todos los tokens dados. Devuelve la lista de
     tokens que resultaron inválidos/desregistrados (para limpiarlos de la
     BD)."""
-    app = _get_app()
+    app = get_firebase_app()
     if app is None or not alerts or not device_tokens:
         return []
 

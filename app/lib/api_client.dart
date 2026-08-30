@@ -2,6 +2,17 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import 'auth_service.dart';
+
+/// Cabecera Authorization con el token de la sesión de Google, si hay una
+/// iniciada — se manda además del device_id de siempre en las llamadas de
+/// "Mi plantilla" (nunca en su lugar), así el backend decide a cuál de
+/// los dos hacer caso (ver fantasy_assistant.auth.resolve_owner_id).
+Future<Map<String, String>> _authHeaders() async {
+  final token = await AuthService.instance.tokenActual();
+  return token == null ? {} : {'Authorization': 'Bearer $token'};
+}
+
 /// URL base del backend Fantasy Assistant, ya desplegado en Railway.
 const String kApiBaseUrl = 'https://fantasy-assistant-production-d8fd.up.railway.app';
 
@@ -373,6 +384,24 @@ class CaptainCandidate {
   }
 }
 
+class CuentaInfo {
+  final String id;
+  final String? email;
+  final String? nombre;
+  final String? fotoUrl;
+
+  CuentaInfo({required this.id, this.email, this.nombre, this.fotoUrl});
+
+  factory CuentaInfo.fromJson(Map<String, dynamic> json) {
+    return CuentaInfo(
+      id: json['id'] as String,
+      email: json['email'] as String?,
+      nombre: json['nombre'] as String?,
+      fotoUrl: json['foto_url'] as String?,
+    );
+  }
+}
+
 class ApiException implements Exception {
   final String message;
   ApiException(this.message);
@@ -542,7 +571,7 @@ class FantasyApiClient {
     final uri = Uri.parse('$baseUrl/team').replace(
       queryParameters: {'device_id': deviceId, if (source != null) 'source': source},
     );
-    final response = await http.get(uri).timeout(const Duration(seconds: 15));
+    final response = await http.get(uri, headers: await _authHeaders()).timeout(const Duration(seconds: 15));
     if (response.statusCode != 200) {
       throw ApiException('Error ${response.statusCode} al leer la plantilla');
     }
@@ -554,7 +583,7 @@ class FantasyApiClient {
     final uri = Uri.parse('$baseUrl/team/capitan').replace(
       queryParameters: {'device_id': deviceId, 'source': source},
     );
-    final response = await http.get(uri).timeout(const Duration(seconds: 25));
+    final response = await http.get(uri, headers: await _authHeaders()).timeout(const Duration(seconds: 25));
     if (response.statusCode != 200) {
       throw ApiException('Error ${response.statusCode} al calcular el capitán óptimo');
     }
@@ -567,7 +596,7 @@ class FantasyApiClient {
     final response = await http
         .post(
           uri,
-          headers: {'Content-Type': 'application/json'},
+          headers: {'Content-Type': 'application/json', ...await _authHeaders()},
           body: jsonEncode({'device_id': deviceId, 'player_id': playerId, if (slot != null) 'slot': slot}),
         )
         .timeout(const Duration(seconds: 20));
@@ -585,7 +614,7 @@ class FantasyApiClient {
     final uri = Uri.parse('$baseUrl/team/contains').replace(
       queryParameters: {'device_id': deviceId, 'player_id': playerId},
     );
-    final response = await http.get(uri).timeout(const Duration(seconds: 10));
+    final response = await http.get(uri, headers: await _authHeaders()).timeout(const Duration(seconds: 10));
     if (response.statusCode != 200) {
       throw ApiException('Error ${response.statusCode} al comprobar la plantilla');
     }
@@ -598,7 +627,7 @@ class FantasyApiClient {
     final response = await http
         .delete(
           uri,
-          headers: {'Content-Type': 'application/json'},
+          headers: {'Content-Type': 'application/json', ...await _authHeaders()},
           body: jsonEncode({'device_id': deviceId, 'player_id': playerId}),
         )
         .timeout(const Duration(seconds: 20));
@@ -625,7 +654,7 @@ class FantasyApiClient {
     final uri = Uri.parse('$baseUrl/team/clear').replace(
       queryParameters: {'device_id': deviceId, 'source': source},
     );
-    final response = await http.delete(uri).timeout(const Duration(seconds: 20));
+    final response = await http.delete(uri, headers: await _authHeaders()).timeout(const Duration(seconds: 20));
     if (response.statusCode >= 300) {
       throw ApiException('Error ${response.statusCode} al vaciar la plantilla');
     }
@@ -635,7 +664,7 @@ class FantasyApiClient {
     final uri = Uri.parse('$baseUrl/team/formacion').replace(
       queryParameters: {'device_id': deviceId, 'source': source},
     );
-    final response = await http.get(uri).timeout(const Duration(seconds: 10));
+    final response = await http.get(uri, headers: await _authHeaders()).timeout(const Duration(seconds: 10));
     if (response.statusCode != 200) {
       throw ApiException('Error ${response.statusCode} al leer la formación');
     }
@@ -648,12 +677,44 @@ class FantasyApiClient {
     final response = await http
         .put(
           uri,
-          headers: {'Content-Type': 'application/json'},
+          headers: {'Content-Type': 'application/json', ...await _authHeaders()},
           body: jsonEncode({'device_id': deviceId, 'source': source, 'formacion': formacion}),
         )
         .timeout(const Duration(seconds: 10));
     if (response.statusCode >= 300) {
       throw ApiException('Error ${response.statusCode} al cambiar la formación');
+    }
+  }
+
+  /// Perfil de la sesión de Google iniciada. Lanza ApiException si no hay
+  /// sesión o el token no es válido.
+  Future<CuentaInfo> getAccountMe() async {
+    final headers = await _authHeaders();
+    if (!headers.containsKey('Authorization')) {
+      throw ApiException('No hay sesión iniciada');
+    }
+    final uri = Uri.parse('$baseUrl/account/me');
+    final response = await http.get(uri, headers: headers).timeout(const Duration(seconds: 15));
+    if (response.statusCode != 200) {
+      throw ApiException('Error ${response.statusCode} al leer la cuenta');
+    }
+    return CuentaInfo.fromJson(jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>);
+  }
+
+  /// Traspasa a la cuenta recién iniciada la plantilla/formación que
+  /// hubiera guardadas con el device_id local — se llama una sola vez,
+  /// justo tras el primer login. Requiere sesión iniciada.
+  Future<void> vincularDispositivo(String deviceId) async {
+    final headers = {'Content-Type': 'application/json', ...await _authHeaders()};
+    if (!headers.containsKey('Authorization')) {
+      throw ApiException('No hay sesión iniciada');
+    }
+    final uri = Uri.parse('$baseUrl/account/vincular-dispositivo');
+    final response = await http
+        .post(uri, headers: headers, body: jsonEncode({'device_id': deviceId}))
+        .timeout(const Duration(seconds: 20));
+    if (response.statusCode >= 300) {
+      throw ApiException('Error ${response.statusCode} al vincular el dispositivo');
     }
   }
 

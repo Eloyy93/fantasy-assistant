@@ -12,7 +12,28 @@
           "package_name": "com.eloy.fantasyassistant.fantasy_assistant_app"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "191835506057-q9mu7h7ifalk4649oqn24lm2rk1nl3u3.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.eloy.fantasyassistant.fantasy_assistant_app",
+            "certificate_hash": "db9397a1abf48dc1d2dce0781fbee24485000b2d"
+          }
+        },
+        {
+          "client_id": "191835506057-vj3ohch8jcl2t6835h6isvlaci6om5hu.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.eloy.fantasyassistant.fantasy_assistant_app",
+            "certificate_hash": "55d1178b9e07fc799665959644cb68c2f06a0f14"
+          }
+        },
+        {
+          "client_id": "191835506057-icb2amf888fjbov6ndhpopshrksqea14.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyDTyalfXemyFd4oudvhu-zMEzvoUXfkYPc"
@@ -20,7 +41,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "191835506057-icb2amf888fjbov6ndhpopshrksqea14.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

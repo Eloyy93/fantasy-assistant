@@ -12,13 +12,15 @@ from urllib.parse import urlparse
 
 import requests
 from apscheduler.schedulers.background import BackgroundScheduler
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from fantasy_assistant.auth import TokenInvalido, resolve_owner_id, verificar_token
 from fantasy_assistant.api.schemas import (
+    AccountOut,
     BargainOut,
     CaptainOut,
     ChollosPrefIn,
@@ -35,6 +37,7 @@ from fantasy_assistant.api.schemas import (
     SubscriptionIn,
     TeamMemberIn,
     TeamPlayerOut,
+    VincularDispositivoIn,
 )
 from fantasy_assistant.config import config
 from fantasy_assistant.datasources import SOURCES, get_data_source
@@ -47,6 +50,7 @@ from fantasy_assistant.db.models import (
     PriceHistory,
     TeamFormation,
     TeamPlayer,
+    User,
 )
 from fantasy_assistant.jobs.sync_data import sync_all_sources
 from fantasy_assistant.modules import bargain_detector, captain_advisor, price_predictor
@@ -461,8 +465,86 @@ def list_subscriptions_detalle(fcm_token: str = Query(...), db: Session = Depend
     return [por_id[pid] for pid in player_ids if pid in por_id]
 
 
+@app.get("/account/me", response_model=AccountOut)
+def account_me(authorization: str | None = Header(default=None), db: Session = Depends(get_db)) -> AccountOut:
+    """Perfil de la sesión iniciada (token de Google verificado). 401 si no
+    hay token o no es válido — a diferencia del resto de endpoints de
+    "Mi plantilla", este SÍ exige haber iniciado sesión."""
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="Falta la cabecera Authorization")
+    try:
+        claims = verificar_token(authorization[7:].strip())
+    except TokenInvalido as e:
+        raise HTTPException(status_code=401, detail=str(e)) from e
+
+    uid = claims["uid"]
+    usuario = db.get(User, uid)
+    if usuario is None:
+        usuario = User(id=uid, email=claims.get("email"), nombre=claims.get("name"), foto_url=claims.get("picture"))
+        db.add(usuario)
+        db.commit()
+    return AccountOut(id=usuario.id, email=usuario.email, nombre=usuario.nombre, foto_url=usuario.foto_url)
+
+
+@app.post("/account/vincular-dispositivo", status_code=204)
+def vincular_dispositivo(
+    payload: VincularDispositivoIn,
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> None:
+    """Traspasa la plantilla y formación guardadas con el device_id local
+    (uso sin sesión) a la cuenta que acaba de iniciar sesión — se llama una
+    vez, justo después del primer login, si el dispositivo ya tenía datos.
+    Si la cuenta YA tenía su propia plantilla, esos jugadores del
+    dispositivo simplemente no se traspasan (no se sobrescribe nada de la
+    cuenta) — la app debe avisar de esto antes de llamar aquí."""
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="Falta la cabecera Authorization")
+    try:
+        claims = verificar_token(authorization[7:].strip())
+    except TokenInvalido as e:
+        raise HTTPException(status_code=401, detail=str(e)) from e
+
+    device_owner_id = f"device:{payload.device_id}"
+    user_owner_id = f"user:{claims['uid']}"
+
+    ya_ocupados_team = {
+        (source, player_id)
+        for source, player_id in db.execute(
+            select(TeamPlayer.source, TeamPlayer.player_id).where(TeamPlayer.owner_id == user_owner_id)
+        ).all()
+    }
+    for fila in db.execute(select(TeamPlayer).where(TeamPlayer.owner_id == device_owner_id)).scalars().all():
+        if (fila.source, fila.player_id) in ya_ocupados_team:
+            continue
+        fila.owner_id = user_owner_id
+        # Al banquillo, no al campo — su antiguo slot podría estar ya
+        # ocupado por otro jugador en la plantilla de la cuenta, y
+        # colocarlo a la fuerza violaría el UNIQUE(owner_id, slot,
+        # source). El usuario los reordena a mano tras vincular.
+        fila.slot = None
+
+    formaciones_existentes = {
+        source
+        for (source,) in db.execute(
+            select(TeamFormation.source).where(TeamFormation.owner_id == user_owner_id)
+        ).all()
+    }
+    for fila in db.execute(select(TeamFormation).where(TeamFormation.owner_id == device_owner_id)).scalars().all():
+        if fila.source in formaciones_existentes:
+            continue
+        fila.owner_id = user_owner_id
+
+    db.commit()
+
+
 @app.post("/team", status_code=201)
-def add_to_team(payload: TeamMemberIn, db: Session = Depends(get_db)) -> dict:
+def add_to_team(
+    payload: TeamMemberIn,
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> dict:
+    owner_id = resolve_owner_id(db, payload.device_id, authorization)
     player = db.get(PlayerRecord, payload.player_id)
     if not player:
         raise HTTPException(status_code=404, detail=f"Jugador '{payload.player_id}' no encontrado")
@@ -475,7 +557,7 @@ def add_to_team(payload: TeamMemberIn, db: Session = Depends(get_db)) -> dict:
         # ("DEF2", "MED1"...) se repiten entre Biwenger y LaLiga Fantasy.
         ocupante = db.execute(
             select(TeamPlayer).where(
-                TeamPlayer.device_id == payload.device_id,
+                TeamPlayer.owner_id == owner_id,
                 TeamPlayer.slot == payload.slot,
                 TeamPlayer.source == player.source,
             )
@@ -484,47 +566,64 @@ def add_to_team(payload: TeamMemberIn, db: Session = Depends(get_db)) -> dict:
             ocupante.slot = None
 
     existente = db.execute(
-        select(TeamPlayer).where(TeamPlayer.device_id == payload.device_id, TeamPlayer.player_id == payload.player_id)
+        select(TeamPlayer).where(TeamPlayer.owner_id == owner_id, TeamPlayer.player_id == payload.player_id)
     ).scalar_one_or_none()
     if existente:
         existente.slot = payload.slot
     else:
-        db.add(TeamPlayer(device_id=payload.device_id, player_id=payload.player_id, source=player.source, slot=payload.slot))
+        db.add(TeamPlayer(owner_id=owner_id, player_id=payload.player_id, source=player.source, slot=payload.slot))
     db.commit()
     return {"status": "añadido"}
 
 
 @app.delete("/team", status_code=204)
-def remove_from_team(payload: TeamMemberIn, db: Session = Depends(get_db)) -> None:
+def remove_from_team(
+    payload: TeamMemberIn,
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> None:
+    owner_id = resolve_owner_id(db, payload.device_id, authorization)
     db.execute(
         TeamPlayer.__table__.delete().where(
-            TeamPlayer.device_id == payload.device_id, TeamPlayer.player_id == payload.player_id
+            TeamPlayer.owner_id == owner_id, TeamPlayer.player_id == payload.player_id
         )
     )
     db.commit()
 
 
 @app.delete("/team/clear", status_code=204)
-def clear_team(device_id: str = Query(...), source: str = Query(...), db: Session = Depends(get_db)) -> None:
+def clear_team(
+    device_id: str = Query(...),
+    source: str = Query(...),
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> None:
     """Vacía toda la plantilla de una fuente (banquillo + huecos). No toca
     la formación elegida ni la plantilla de la otra fuente."""
+    owner_id = resolve_owner_id(db, device_id, authorization)
     player_ids_de_la_fuente = db.execute(
         select(PlayerRecord.id).where(PlayerRecord.source == source)
     ).scalars().all()
     db.execute(
         TeamPlayer.__table__.delete().where(
-            TeamPlayer.device_id == device_id, TeamPlayer.player_id.in_(player_ids_de_la_fuente)
+            TeamPlayer.owner_id == owner_id, TeamPlayer.player_id.in_(player_ids_de_la_fuente)
         )
     )
     db.commit()
 
 
 @app.get("/team/contains")
-def team_contains(device_id: str = Query(...), player_id: str = Query(...), db: Session = Depends(get_db)) -> dict:
+def team_contains(
+    device_id: str = Query(...),
+    player_id: str = Query(...),
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> dict:
     """Consulta ligera para el botón "añadir a mi plantilla" de la ficha de
     un jugador, sin traer toda la plantilla solo para comprobar uno."""
+    owner_id = resolve_owner_id(db, device_id, authorization)
     existente = db.execute(
-        select(TeamPlayer).where(TeamPlayer.device_id == device_id, TeamPlayer.player_id == player_id)
+        select(TeamPlayer).where(TeamPlayer.owner_id == owner_id, TeamPlayer.player_id == player_id)
     ).scalar_one_or_none()
     return {"en_plantilla": existente is not None}
 
@@ -533,12 +632,14 @@ def team_contains(device_id: str = Query(...), player_id: str = Query(...), db: 
 def get_team(
     device_id: str = Query(...),
     source: str | None = Query(default=None),
+    authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ) -> list[TeamPlayerOut]:
     """Plantilla del usuario: los jugadores que ha colocado él mismo en el
     campo desde la app (independiente de las notificaciones push), con su
     variación de precio reciente y sus puntos."""
-    stmt = select(TeamPlayer.player_id, TeamPlayer.slot).where(TeamPlayer.device_id == device_id)
+    owner_id = resolve_owner_id(db, device_id, authorization)
+    stmt = select(TeamPlayer.player_id, TeamPlayer.slot).where(TeamPlayer.owner_id == owner_id)
     filas = db.execute(stmt).all()
     if not filas:
         return []
@@ -593,12 +694,14 @@ def get_team(
 def get_capitan(
     device_id: str = Query(...),
     source: str = Query(default=config.fantasy_source),
+    authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ) -> list[CaptainOut]:
     """Módulo 5 — de los jugadores colocados en el campo (no el
     banquillo), quién tiene más probabilidad de puntuar alto esta
     jornada, para elegir el multiplicador de capitán."""
-    candidatos = captain_advisor.recomendar_capitan(db, device_id, source)
+    owner_id = resolve_owner_id(db, device_id, authorization)
+    candidatos = captain_advisor.recomendar_capitan(db, owner_id, source)
     return [
         CaptainOut(
             id=c.player_id,
@@ -616,25 +719,36 @@ def get_capitan(
 
 
 @app.get("/team/formacion", response_model=FormationOut)
-def get_formacion(device_id: str = Query(...), source: str = Query(...), db: Session = Depends(get_db)) -> FormationOut:
+def get_formacion(
+    device_id: str = Query(...),
+    source: str = Query(...),
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> FormationOut:
+    owner_id = resolve_owner_id(db, device_id, authorization)
     formacion = db.execute(
-        select(TeamFormation.formacion).where(TeamFormation.device_id == device_id, TeamFormation.source == source)
+        select(TeamFormation.formacion).where(TeamFormation.owner_id == owner_id, TeamFormation.source == source)
     ).scalar_one_or_none()
     return FormationOut(formacion=formacion or "4-3-3")
 
 
 @app.put("/team/formacion", status_code=204)
-def set_formacion(payload: FormationIn, db: Session = Depends(get_db)) -> None:
+def set_formacion(
+    payload: FormationIn,
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> None:
     if payload.formacion not in FORMACIONES:
         raise HTTPException(status_code=400, detail=f"Formación '{payload.formacion}' no soportada")
 
+    owner_id = resolve_owner_id(db, payload.device_id, authorization)
     existente = db.execute(
-        select(TeamFormation).where(TeamFormation.device_id == payload.device_id, TeamFormation.source == payload.source)
+        select(TeamFormation).where(TeamFormation.owner_id == owner_id, TeamFormation.source == payload.source)
     ).scalar_one_or_none()
     if existente:
         existente.formacion = payload.formacion
     else:
-        db.add(TeamFormation(device_id=payload.device_id, source=payload.source, formacion=payload.formacion))
+        db.add(TeamFormation(owner_id=owner_id, source=payload.source, formacion=payload.formacion))
     db.commit()
 
 
