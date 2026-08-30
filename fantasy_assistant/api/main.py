@@ -128,6 +128,25 @@ def health(db: Session = Depends(get_db)) -> dict:
     return {"status": "ok", "jugadores_por_fuente": jugadores_por_fuente}
 
 
+@app.get("/admin/scheduler-status")
+def admin_scheduler_status() -> dict:
+    """Diagnóstico TEMPORAL: estado real del BackgroundScheduler dentro de
+    este proceso — si el job de sync ni siquiera aparece aquí, es que
+    _startup() no llegó a programarlo (o el scheduler no está corriendo),
+    algo que los logs de Railway no dejan ver sin acceso a la CLI."""
+    return {
+        "scheduler_running": _scheduler.running,
+        "jobs": [
+            {
+                "id": job.id,
+                "next_run_time": str(job.next_run_time),
+                "pending": job.pending,
+            }
+            for job in _scheduler.get_jobs()
+        ],
+    }
+
+
 @app.post("/admin/sync-diagnostico")
 def admin_sync_diagnostico(source: str = Query(...), limite: int = Query(default=5, le=20)) -> dict:
     """Diagnóstico TEMPORAL: sincroniza una muestra pequeña de [limite]
