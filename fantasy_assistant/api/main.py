@@ -128,19 +128,6 @@ def health(db: Session = Depends(get_db)) -> dict:
     return {"status": "ok", "jugadores_por_fuente": jugadores_por_fuente}
 
 
-@app.get("/admin/scheduler-status")
-def admin_scheduler_status() -> dict:
-    """Diagnóstico TEMPORAL (2ª vuelta) — ver commit del dialecto SQLite
-    vs Postgres para el contexto completo."""
-    return {
-        "scheduler_running": _scheduler.running,
-        "jobs": [
-            {"id": job.id, "next_run_time": str(job.next_run_time), "pending": job.pending}
-            for job in _scheduler.get_jobs()
-        ],
-    }
-
-
 # CDNs de foto conocidos de las fuentes soportadas (ver PlayerRecord.foto_url).
 # El proxy solo reenvía estos hosts para que no se convierta en un proxy
 # HTTP abierto a cualquier URL.
