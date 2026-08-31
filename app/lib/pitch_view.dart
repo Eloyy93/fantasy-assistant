@@ -235,8 +235,19 @@ class FormationPitchView extends StatelessWidget {
   final String formacion;
   final Map<String, TeamPlayer> asignados; // slot -> jugador
   final void Function(String slot) onTapSlot;
+  // Pulsación larga + arrastre de un hueco a otro (vacío u ocupado) para
+  // colocar/intercambiar jugadores directamente en el campo, sin pasar
+  // por el selector. Null = arrastrar desactivado (ej. mientras no hay
+  // conexión con el dispositivo).
+  final void Function(String origen, String destino)? onDropSlot;
 
-  const FormationPitchView({super.key, required this.formacion, required this.asignados, required this.onTapSlot});
+  const FormationPitchView({
+    super.key,
+    required this.formacion,
+    required this.asignados,
+    required this.onTapSlot,
+    this.onDropSlot,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -278,9 +289,12 @@ class FormationPitchView extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
                             for (final slot in fila)
-                              asignados[slot] != null
-                                  ? _TeamPlayerChip(jugador: asignados[slot]!, onTap: (_) => onTapSlot(slot))
-                                  : _EmptySlotChip(posicion: posicionDeSlot(slot), onTap: () => onTapSlot(slot)),
+                              _DraggableSlot(
+                                slot: slot,
+                                jugador: asignados[slot],
+                                onTapSlot: onTapSlot,
+                                onDropSlot: onDropSlot,
+                              ),
                           ],
                         ),
                       ),
@@ -335,6 +349,55 @@ class _EmptySlotChip extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Envuelve un hueco del campo (vacío u ocupado) para que se pueda
+/// arrastrar (si tiene jugador, con pulsación larga para no chocar con
+/// el toque normal que abre el menú) y soltar sobre él otro jugador —
+/// si el hueco de destino ya tenía a alguien, se intercambian; si
+/// estaba vacío, simplemente se mueve.
+class _DraggableSlot extends StatelessWidget {
+  final String slot;
+  final TeamPlayer? jugador;
+  final void Function(String slot) onTapSlot;
+  final void Function(String origen, String destino)? onDropSlot;
+
+  const _DraggableSlot({required this.slot, required this.jugador, required this.onTapSlot, required this.onDropSlot});
+
+  @override
+  Widget build(BuildContext context) {
+    final chip = jugador != null
+        ? _TeamPlayerChip(jugador: jugador!, onTap: (_) => onTapSlot(slot))
+        : _EmptySlotChip(posicion: posicionDeSlot(slot), onTap: () => onTapSlot(slot));
+
+    if (onDropSlot == null) return chip;
+
+    return DragTarget<String>(
+      onWillAcceptWithDetails: (details) => details.data != slot,
+      onAcceptWithDetails: (details) => onDropSlot!(details.data, slot),
+      builder: (context, candidateData, rejectedData) {
+        final resaltado = candidateData.isNotEmpty;
+        final contenido = jugador == null
+            ? chip
+            : LongPressDraggable<String>(
+                data: slot,
+                feedback: Material(
+                  color: Colors.transparent,
+                  child: Opacity(opacity: 0.85, child: _TeamPlayerChip(jugador: jugador!, onTap: null)),
+                ),
+                childWhenDragging: Opacity(opacity: 0.3, child: chip),
+                child: chip,
+              );
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          decoration: resaltado
+              ? BoxDecoration(shape: BoxShape.circle, border: Border.all(color: kMintAccent, width: 2.5))
+              : null,
+          child: contenido,
+        );
+      },
     );
   }
 }

@@ -1163,6 +1163,33 @@ class _TeamScreenState extends State<TeamScreen> {
     }
   }
 
+  /// Arrastrar un jugador de un hueco a otro. Si el destino ya tenía a
+  /// alguien, se intercambian de sitio; si estaba vacío, simplemente se
+  /// mueve. addToTeam ya vacía por su cuenta el hueco de origen (es el
+  /// mismo jugador cambiando de slot) y el de destino si lo ocupaba otro
+  /// (lo manda al banquillo) — así que basta con, si había alguien en el
+  /// destino, reubicarlo después en el hueco que ha quedado libre.
+  Future<void> _swapSlots(String origen, String destino) async {
+    final deviceId = _deviceId;
+    if (deviceId == null || origen == destino) return;
+    final asignados = _repartir().asignados;
+    final jugadorOrigen = asignados[origen];
+    final jugadorDestino = asignados[destino];
+    if (jugadorOrigen == null) return;
+
+    try {
+      await widget.api.addToTeam(deviceId: deviceId, playerId: jugadorOrigen.id, slot: destino);
+      if (jugadorDestino != null) {
+        await widget.api.addToTeam(deviceId: deviceId, playerId: jugadorDestino.id, slot: origen);
+      }
+      _cargar();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('No se pudo mover: $e')));
+      _cargar();
+    }
+  }
+
   Future<void> _elegirParaHueco(String slot, {TeamPlayer? actual}) async {
     final deviceId = _deviceId;
     if (deviceId == null) return;
@@ -1400,6 +1427,7 @@ class _TeamScreenState extends State<TeamScreen> {
             formacion: _formacion,
             asignados: r.asignados,
             onTapSlot: (slot) => _onTapSlot(slot, r.asignados[slot]),
+            onDropSlot: _swapSlots,
           ),
           const SizedBox(height: 20),
           _banquilloHeader(),
@@ -1446,6 +1474,7 @@ class _TeamScreenState extends State<TeamScreen> {
                       formacion: _formacion,
                       asignados: r.asignados,
                       onTapSlot: (slot) => _onTapSlot(slot, r.asignados[slot]),
+                      onDropSlot: _swapSlots,
                     ),
                   ),
                 ),
