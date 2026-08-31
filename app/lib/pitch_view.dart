@@ -3,6 +3,13 @@ import 'package:flutter/material.dart';
 import 'api_client.dart';
 import 'theme.dart';
 
+/// Lo que viaja al arrastrar un jugador: quién es y de dónde viene —
+/// `origenSlot` null significa que viene del banquillo (que no tiene
+/// slot), no del campo. Un mismo tipo para el campo y el banquillo es lo
+/// que permite que un DragTarget del campo acepte arrastres de los dos
+/// sitios.
+typedef DragJugador = ({String jugadorId, String? origenSlot});
+
 /// Dibuja las líneas de un campo de fútbol (banda, círculo central, áreas)
 /// sobre un fondo verde, en orientación vertical (portería abajo).
 class _PitchPainter extends CustomPainter {
@@ -235,11 +242,12 @@ class FormationPitchView extends StatelessWidget {
   final String formacion;
   final Map<String, TeamPlayer> asignados; // slot -> jugador
   final void Function(String slot) onTapSlot;
-  // Pulsación larga + arrastre de un hueco a otro (vacío u ocupado) para
-  // colocar/intercambiar jugadores directamente en el campo, sin pasar
-  // por el selector. Null = arrastrar desactivado (ej. mientras no hay
-  // conexión con el dispositivo).
-  final void Function(String origen, String destino)? onDropSlot;
+  // Pulsación larga + arrastre de un hueco a otro (vacío u ocupado), o
+  // desde el banquillo hasta un hueco, para colocar/intercambiar
+  // jugadores directamente en el campo sin pasar por el selector. Null =
+  // arrastrar desactivado (ej. mientras no hay conexión con el
+  // dispositivo).
+  final void Function(DragJugador origen, String destino)? onDropSlot;
 
   const FormationPitchView({
     super.key,
@@ -362,7 +370,7 @@ class _DraggableSlot extends StatelessWidget {
   final String slot;
   final TeamPlayer? jugador;
   final void Function(String slot) onTapSlot;
-  final void Function(String origen, String destino)? onDropSlot;
+  final void Function(DragJugador origen, String destino)? onDropSlot;
 
   const _DraggableSlot({required this.slot, required this.jugador, required this.onTapSlot, required this.onDropSlot});
 
@@ -374,15 +382,15 @@ class _DraggableSlot extends StatelessWidget {
 
     if (onDropSlot == null) return chip;
 
-    return DragTarget<String>(
-      onWillAcceptWithDetails: (details) => details.data != slot,
+    return DragTarget<DragJugador>(
+      onWillAcceptWithDetails: (details) => details.data.origenSlot != slot,
       onAcceptWithDetails: (details) => onDropSlot!(details.data, slot),
       builder: (context, candidateData, rejectedData) {
         final resaltado = candidateData.isNotEmpty;
         final contenido = jugador == null
             ? chip
-            : LongPressDraggable<String>(
-                data: slot,
+            : LongPressDraggable<DragJugador>(
+                data: (jugadorId: jugador!.id, origenSlot: slot),
                 feedback: Material(
                   color: Colors.transparent,
                   child: Opacity(opacity: 0.85, child: _TeamPlayerChip(jugador: jugador!, onTap: null)),

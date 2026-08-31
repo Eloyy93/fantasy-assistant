@@ -5,7 +5,9 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:flutter/rendering.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:share_plus/share_plus.dart';
 
 import 'adsense_sidebar.dart';
 import 'ads_service.dart';
@@ -1084,6 +1086,8 @@ class _TeamScreenState extends State<TeamScreen> {
   String _formacion = '4-3-3';
   List<TeamPlayer>? _jugadores;
   String? _error;
+  final _pitchKey = GlobalKey();
+  bool _compartiendo = false;
 
   @override
   void initState() {
@@ -1163,24 +1167,26 @@ class _TeamScreenState extends State<TeamScreen> {
     }
   }
 
-  /// Arrastrar un jugador de un hueco a otro. Si el destino ya tenía a
-  /// alguien, se intercambian de sitio; si estaba vacío, simplemente se
-  /// mueve. addToTeam ya vacía por su cuenta el hueco de origen (es el
-  /// mismo jugador cambiando de slot) y el de destino si lo ocupaba otro
-  /// (lo manda al banquillo) — así que basta con, si había alguien en el
-  /// destino, reubicarlo después en el hueco que ha quedado libre.
-  Future<void> _swapSlots(String origen, String destino) async {
+  /// Arrastrar un jugador hasta un hueco del campo — el origen puede ser
+  /// otro hueco del campo (se intercambian si el destino ya tenía a
+  /// alguien) o el banquillo (origenSlot null: no hay nada que
+  /// intercambiar, el jugador simplemente entra y quien ocupara el
+  /// destino baja al banquillo, igual que al elegirlo desde el
+  /// selector). addToTeam ya vacía por su cuenta el hueco de origen si
+  /// venía del campo (es el mismo jugador cambiando de slot) y el de
+  /// destino si lo ocupaba otro (lo manda al banquillo) — así que solo
+  /// hace falta, si venía del campo y el destino tenía a alguien,
+  /// reubicar a ese alguien en el hueco que ha quedado libre.
+  Future<void> _moverJugador(DragJugador origen, String destino) async {
     final deviceId = _deviceId;
-    if (deviceId == null || origen == destino) return;
+    if (deviceId == null || origen.origenSlot == destino) return;
     final asignados = _repartir().asignados;
-    final jugadorOrigen = asignados[origen];
     final jugadorDestino = asignados[destino];
-    if (jugadorOrigen == null) return;
 
     try {
-      await widget.api.addToTeam(deviceId: deviceId, playerId: jugadorOrigen.id, slot: destino);
-      if (jugadorDestino != null) {
-        await widget.api.addToTeam(deviceId: deviceId, playerId: jugadorDestino.id, slot: origen);
+      await widget.api.addToTeam(deviceId: deviceId, playerId: origen.jugadorId, slot: destino);
+      if (origen.origenSlot != null && jugadorDestino != null) {
+        await widget.api.addToTeam(deviceId: deviceId, playerId: jugadorDestino.id, slot: origen.origenSlot!);
       }
       _cargar();
     } catch (e) {
@@ -1188,6 +1194,15 @@ class _TeamScreenState extends State<TeamScreen> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('No se pudo mover: $e')));
       _cargar();
     }
+  }
+
+  /// Arrastrar un jugador del campo hasta el banquillo — igual que
+  /// pulsar "Quitar del campo" en su menú, pero arrastrando.
+  Future<void> _moverAlBanquillo(DragJugador origen) async {
+    if (origen.origenSlot == null) return; // ya estaba en el banquillo
+    final asignados = _repartir().asignados;
+    final jugador = asignados[origen.origenSlot];
+    if (jugador != null) await _quitarDelCampo(jugador);
   }
 
   Future<void> _elegirParaHueco(String slot, {TeamPlayer? actual}) async {
@@ -1379,6 +1394,13 @@ class _TeamScreenState extends State<TeamScreen> {
                 : null,
           ),
           IconButton(
+            icon: _compartiendo
+                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                : const Icon(Icons.ios_share_rounded),
+            tooltip: 'Compartir alineación',
+            onPressed: (hayJugadores && !_compartiendo) ? _compartirAlineacion : null,
+          ),
+          IconButton(
             icon: const Icon(Icons.delete_sweep_rounded),
             tooltip: 'Vaciar plantilla',
             onPressed: hayJugadores ? _vaciarPlantilla : null,
@@ -1390,6 +1412,29 @@ class _TeamScreenState extends State<TeamScreen> {
         child: isDesktop(context) ? _buildBodyDesktop(context) : DesktopContainer(child: _buildBodyMobile(context)),
       ),
     );
+  }
+
+  /// Captura el campo (el RepaintBoundary de _pitchKey) como PNG y abre el
+  /// selector de compartir nativo — pixelRatio 3 para que se vea nítido
+  /// aunque se comparta a tamaño grande (WhatsApp, Instagram Stories...).
+  Future<void> _compartirAlineacion() async {
+    setState(() => _compartiendo = true);
+    try {
+      final boundary = _pitchKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+      if (boundary == null) return;
+      final imagen = await boundary.toImage(pixelRatio: 3);
+      final bytes = await imagen.toByteData(format: ImageByteFormat.png);
+      if (bytes == null) return;
+      await Share.shareXFiles(
+        [XFile.fromData(bytes.buffer.asUint8List(), mimeType: 'image/png', name: 'mi_alineacion.png')],
+        text: 'Mi alineación en Master Fantasy ⚽',
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('No se pudo compartir: $e')));
+    } finally {
+      if (mounted) setState(() => _compartiendo = false);
+    }
   }
 
   ({Map<String, TeamPlayer> asignados, List<TeamPlayer> banquillo}) _repartir() {
@@ -1423,11 +1468,14 @@ class _TeamScreenState extends State<TeamScreen> {
             child: Center(child: CircularProgressIndicator()),
           )
         else ...[
-          FormationPitchView(
-            formacion: _formacion,
-            asignados: r.asignados,
-            onTapSlot: (slot) => _onTapSlot(slot, r.asignados[slot]),
-            onDropSlot: _swapSlots,
+          RepaintBoundary(
+            key: _pitchKey,
+            child: FormationPitchView(
+              formacion: _formacion,
+              asignados: r.asignados,
+              onTapSlot: (slot) => _onTapSlot(slot, r.asignados[slot]),
+              onDropSlot: _moverJugador,
+            ),
           ),
           const SizedBox(height: 20),
           _banquilloHeader(),
@@ -1470,11 +1518,14 @@ class _TeamScreenState extends State<TeamScreen> {
                 Expanded(
                   child: FitAspectRatio(
                     aspectRatio: 0.68,
-                    child: FormationPitchView(
-                      formacion: _formacion,
-                      asignados: r.asignados,
-                      onTapSlot: (slot) => _onTapSlot(slot, r.asignados[slot]),
-                      onDropSlot: _swapSlots,
+                    child: RepaintBoundary(
+                      key: _pitchKey,
+                      child: FormationPitchView(
+                        formacion: _formacion,
+                        asignados: r.asignados,
+                        onTapSlot: (slot) => _onTapSlot(slot, r.asignados[slot]),
+                        onDropSlot: _moverJugador,
+                      ),
                     ),
                   ),
                 ),
@@ -1517,22 +1568,61 @@ class _TeamScreenState extends State<TeamScreen> {
   }
 
   Widget _banquilloLista(List<TeamPlayer> banquillo) {
-    if (banquillo.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 16),
-        child: Text(
-          'Toca un hueco vacío del campo para colocar jugadores, o añade aquí a los que tengas de reserva.',
-          style: TextStyle(color: kTextSecondary),
-        ),
-      );
-    }
-    return Column(
-      children: [
-        for (final jugador in banquillo) ...[
-          _TeamPlayerCard(jugador: jugador, onQuitar: () => _quitarDelEquipo(jugador)),
-          const SizedBox(height: 10),
-        ],
-      ],
+    // El banquillo entero es también un DragTarget: soltar aquí un
+    // jugador que se arrastraba desde el campo lo manda al banquillo
+    // (como "Quitar del campo" en su menú, pero arrastrando). Un
+    // jugador que ya viene del banquillo (origenSlot null) no dispara
+    // nada al soltarlo aquí mismo.
+    return DragTarget<DragJugador>(
+      onWillAcceptWithDetails: (details) => details.data.origenSlot != null,
+      onAcceptWithDetails: (details) => _moverAlBanquillo(details.data),
+      builder: (context, candidateData, rejectedData) {
+        final resaltado = candidateData.isNotEmpty;
+        if (banquillo.isEmpty) {
+          return AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: resaltado ? Border.all(color: kMintAccent, width: 2) : null,
+            ),
+            child: const Text(
+              'Toca un hueco vacío del campo para colocar jugadores, o añade aquí a los que tengas de reserva.',
+              style: TextStyle(color: kTextSecondary),
+            ),
+          );
+        }
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: resaltado ? Border.all(color: kMintAccent, width: 2) : null,
+          ),
+          child: Column(
+            children: [
+              for (final jugador in banquillo) ...[
+                LongPressDraggable<DragJugador>(
+                  data: (jugadorId: jugador.id, origenSlot: null),
+                  feedback: Material(
+                    color: Colors.transparent,
+                    child: SizedBox(
+                      width: 260,
+                      child: Opacity(opacity: 0.9, child: _TeamPlayerCard(jugador: jugador, onQuitar: () {})),
+                    ),
+                  ),
+                  childWhenDragging: Opacity(
+                    opacity: 0.3,
+                    child: _TeamPlayerCard(jugador: jugador, onQuitar: () => _quitarDelEquipo(jugador)),
+                  ),
+                  child: _TeamPlayerCard(jugador: jugador, onQuitar: () => _quitarDelEquipo(jugador)),
+                ),
+                const SizedBox(height: 10),
+              ],
+            ],
+          ),
+        );
+      },
     );
   }
 }
