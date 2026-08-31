@@ -20,3 +20,12 @@
 -keep class com.google.android.gms.ads.** { *; }
 -keep class com.android.billingclient.** { *; }
 -dontwarn com.google.android.gms.ads.**
+
+# google_mlkit_text_recognition referencia en su código los reconocedores
+# de chino/devanagari/japonés/coreano aunque solo usamos el de script
+# latino (ver lineup_scan_io.dart) — sin sus dependencias añadidas, R8 no
+# encuentra esas clases y rompe el build en vez de simplemente omitirlas.
+-dontwarn com.google.mlkit.vision.text.chinese.**
+-dontwarn com.google.mlkit.vision.text.devanagari.**
+-dontwarn com.google.mlkit.vision.text.japanese.**
+-dontwarn com.google.mlkit.vision.text.korean.**

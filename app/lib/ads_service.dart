@@ -2,17 +2,12 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
-/// Ad unit IDs — de PRUEBA (oficiales de Google: sirven anuncios reales de
-/// muestra, sin infringir política, y sin necesitar cuenta de AdMob).
-/// Sustituir por los IDs reales de vuestra cuenta de AdMob antes de
-/// publicar en Play Store — si no, Google puede suspender la cuenta por
-/// tráfico inválido (anuncios de prueba mostrados a usuarios reales).
-const String _testBannerAdUnitId = 'ca-app-pub-3940256099942544/6300978111';
+/// ID del bloque de anuncios "Banner" real, de la cuenta de AdMob
+/// vinculada a la app publicada en Play Store (ver también el App ID en
+/// AndroidManifest.xml).
+const String _bannerAdUnitId = 'ca-app-pub-2987330970119801/3711591786';
 
-/// TODO al crear la cuenta de AdMob: registrar la app ahí, crear un bloque
-/// de anuncios "Banner" y sustituir _testBannerAdUnitId (y el App ID en
-/// AndroidManifest.xml) por los reales.
-String get bannerAdUnitId => _testBannerAdUnitId;
+String get bannerAdUnitId => _bannerAdUnitId;
 
 Future<void> initAds() async {
   // google_mobile_ads no tiene implementación web — en la versión web no
