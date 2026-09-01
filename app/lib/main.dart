@@ -556,12 +556,7 @@ class _PlayerSearchScreenState extends State<PlayerSearchScreen> {
         // En escritorio no se muestra: el anuncio va en la barra lateral
         // (buildAdsenseSidebar), un banner de 320x50 se perdería ahí.
         if (!desktop) ...[
-          ValueListenableBuilder<bool>(
-            valueListenable: PurchaseService.instance.adsRemoved,
-            builder: (context, sinAnuncios, _) => sinAnuncios
-                ? const SizedBox.shrink()
-                : const SafeArea(top: false, child: Center(child: BannerAdBar())),
-          ),
+          const ScreenAdBanner(),
           const Padding(
             padding: EdgeInsets.only(bottom: 8),
             child: Text('© 2026 Master Fantasy', style: TextStyle(fontSize: 11, color: kTextTertiary)),
@@ -674,6 +669,8 @@ class _CompareScreenState extends State<CompareScreen> {
               child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
             ),
           if (_resultado != null) _CompareTable(a: _resultado!.$1, b: _resultado!.$2),
+          const SizedBox(height: 16),
+          const ScreenAdBanner(),
         ],
       )),
     );
@@ -1407,9 +1404,16 @@ class _TeamScreenState extends State<TeamScreen> {
           ),
         ],
       ),
-      body: RefreshIndicator(
-        onRefresh: _cargar,
-        child: isDesktop(context) ? _buildBodyDesktop(context) : DesktopContainer(child: _buildBodyMobile(context)),
+      body: Column(
+        children: [
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: _cargar,
+              child: isDesktop(context) ? _buildBodyDesktop(context) : DesktopContainer(child: _buildBodyMobile(context)),
+            ),
+          ),
+          const ScreenAdBanner(),
+        ],
       ),
     );
   }
@@ -2152,6 +2156,8 @@ class _ImportarCapturaScreenState extends State<ImportarCapturaScreen> {
                 ),
               ],
             ],
+            const SizedBox(height: 16),
+            const ScreenAdBanner(),
           ],
         ),
       ),
@@ -2285,6 +2291,8 @@ class _CaptainScreenState extends State<CaptainScreen> {
               _CaptainCard(candidato: candidatos[i], top: i == 0),
               const SizedBox(height: 10),
             ],
+            const SizedBox(height: 16),
+            const ScreenAdBanner(),
           ],
         )),
       ),
@@ -2450,9 +2458,16 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Notificaciones')),
-      body: RefreshIndicator(
-        onRefresh: _cargar,
-        child: DesktopContainer(child: _buildBody(context)),
+      body: Column(
+        children: [
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: _cargar,
+              child: DesktopContainer(child: _buildBody(context)),
+            ),
+          ),
+          const ScreenAdBanner(),
+        ],
       ),
     );
   }
@@ -2684,6 +2699,8 @@ class _BargainsScreenState extends State<BargainsScreen> {
             _BargainCard(chollo: chollo),
             const SizedBox(height: 10),
           ],
+          const SizedBox(height: 16),
+          const ScreenAdBanner(),
         ],
       )),
     );
@@ -3186,6 +3203,8 @@ class _PrediccionScreenState extends State<PrediccionScreen> {
                     : PointsHistoryChart(puntos: _historial!.puntos, source: widget.player.source),
               ),
             ),
+            const SizedBox(height: 16),
+            const ScreenAdBanner(),
           ],
         ),
       ),
@@ -3616,7 +3635,14 @@ class _LineupScreenState extends State<LineupScreen> {
       appBar: AppBar(
         title: Text('Optimizador · ${widget.source == 'biwenger' ? 'Biwenger' : 'LaLiga Fantasy'}'),
       ),
-      body: isDesktop(context) ? _buildBodyDesktop(context) : DesktopContainer(child: _buildBodyMobile(context)),
+      body: Column(
+        children: [
+          Expanded(
+            child: isDesktop(context) ? _buildBodyDesktop(context) : DesktopContainer(child: _buildBodyMobile(context)),
+          ),
+          const ScreenAdBanner(),
+        ],
+      ),
     );
   }
 }

@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import 'ads_service.dart';
+import 'purchase_service.dart';
+
 /// A partir de este ancho la app deja de tratarse como "móvil estirado" y
 /// pasa a diseño de escritorio (contenido centrado, listas en cuadrícula,
 /// hueco para el anuncio lateral).
@@ -23,6 +26,27 @@ class DesktopContainer extends StatelessWidget {
     return Align(
       alignment: Alignment.topCenter,
       child: ConstrainedBox(constraints: BoxConstraints(maxWidth: maxWidth), child: child),
+    );
+  }
+}
+
+/// Banner de AdMob para el final de una pantalla móvil — usar como último
+/// hijo del Column del body, NUNCA como Scaffold.bottomNavigationBar (esa
+/// combinación con el platform view de AdMob rompe el compositing del
+/// resto del árbol de widgets, verificado en emulador). No se muestra en
+/// escritorio (ahí el anuncio va en la barra lateral, buildAdsenseSidebar)
+/// ni a quien ha quitado los anuncios.
+class ScreenAdBanner extends StatelessWidget {
+  const ScreenAdBanner({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    if (isDesktop(context)) return const SizedBox.shrink();
+    return ValueListenableBuilder<bool>(
+      valueListenable: PurchaseService.instance.adsRemoved,
+      builder: (context, sinAnuncios, _) => sinAnuncios
+          ? const SizedBox.shrink()
+          : const SafeArea(top: false, child: Center(child: BannerAdBar())),
     );
   }
 }
