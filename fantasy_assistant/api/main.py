@@ -298,6 +298,8 @@ def _build_compare_player(db: Session, player_id: str) -> ComparePlayerOut:
         posicion=player.posicion,
         precio=player.precio,
         foto_url=player.foto_url,
+        estado=player.estado,
+        estado_info=player.estado_info,
         variacion_precio=variacion,
         puntos_recientes=[{"jornada": j, "puntos": p} for j, p in reversed(puntos_recientes)],
         puntos_temporada=puntos_temporada,
@@ -368,6 +370,8 @@ def get_bargains(
                 ratio=c.ratio,
                 zscore=c.zscore,
                 foto_url=player.foto_url if player else "",
+                estado=player.estado if player else "ok",
+                estado_info=player.estado_info if player else None,
             )
         )
     return resultado
@@ -645,6 +649,8 @@ def get_team(
                 puntos_temporada=puntos_temporada,
                 slot=slot,
                 foto_url=player.foto_url,
+                estado=player.estado,
+                estado_info=player.estado_info,
             )
         )
 
@@ -670,6 +676,8 @@ def get_capitan(
             equipo=c.equipo,
             posicion=c.posicion,
             foto_url=c.foto_url,
+            estado=c.estado,
+            estado_info=c.estado_info,
             puntos_esperados=c.puntos_esperados,
             score=c.score,
             proximo_rival=c.proximo_rival,
@@ -767,6 +775,8 @@ def get_recomendados(
                 puntos_temporada=puntos_temporada,
                 slot=None,
                 foto_url=player.foto_url,
+                estado=player.estado,
+                estado_info=player.estado_info,
             )
         )
 
@@ -796,6 +806,8 @@ def get_lineup(
                 "precio": j.precio,
                 "puntos_esperados": j.puntos_esperados,
                 "foto_url": j.foto_url,
+                "estado": j.estado,
+                "estado_info": j.estado_info,
             }
             for j in result.jugadores
         ],

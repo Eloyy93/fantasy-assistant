@@ -724,6 +724,10 @@ class _CompareSlot extends StatelessWidget {
                 color: p == null ? kTextSecondary : Colors.white,
               ),
             ),
+            if (p != null && etiquetaEstadoJugador(p.estado) != null) ...[
+              const SizedBox(height: 4),
+              PlayerStatusBadge(estado: p.estado),
+            ],
           ],
         ),
       ),
@@ -741,6 +745,8 @@ class _CompareTable extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
+        if ((etiquetaEstadoJugador(a.estado) != null) || (etiquetaEstadoJugador(b.estado) != null))
+          _fila('Estado', etiquetaEstadoJugador(a.estado) ?? 'Disponible', etiquetaEstadoJugador(b.estado) ?? 'Disponible'),
         _fila('Precio', '${(a.precio / 1000000).toStringAsFixed(2)} M€', '${(b.precio / 1000000).toStringAsFixed(2)} M€'),
         _fila('Variación reciente', _variacionTexto(a.variacionPrecio), _variacionTexto(b.variacionPrecio)),
         _fila(
@@ -1252,7 +1258,17 @@ class _TeamScreenState extends State<TeamScreen> {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => PrediccionScreen(
-          player: Player(id: j.id, source: j.source, nombre: j.nombre, equipo: j.equipo, posicion: j.posicion, precio: j.precio),
+          player: Player(
+            id: j.id,
+            source: j.source,
+            nombre: j.nombre,
+            equipo: j.equipo,
+            posicion: j.posicion,
+            precio: j.precio,
+            fotoUrl: j.fotoUrl,
+            estado: j.estado,
+            estadoInfo: j.estadoInfo,
+          ),
           api: widget.api,
         ),
       ),
@@ -1694,7 +1710,21 @@ class _TeamPlayerCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(jugador.nombre, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        jugador.nombre,
+                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (etiquetaEstadoJugador(jugador.estado) != null) ...[
+                      const SizedBox(width: 6),
+                      PlayerStatusBadge(estado: jugador.estado),
+                    ],
+                  ],
+                ),
                 const SizedBox(height: 2),
                 Text(equipoLabel(jugador.equipo), style: const TextStyle(fontSize: 13, color: kTextSecondary)),
               ],
@@ -1922,7 +1952,21 @@ class _RecomendadoCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(jugador.nombre, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            jugador.nombre,
+                            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (etiquetaEstadoJugador(jugador.estado) != null) ...[
+                          const SizedBox(width: 6),
+                          PlayerStatusBadge(estado: jugador.estado),
+                        ],
+                      ],
+                    ),
                     const SizedBox(height: 2),
                     Text(equipoLabel(jugador.equipo), style: const TextStyle(fontSize: 13, color: kTextSecondary)),
                   ],
@@ -2334,7 +2378,21 @@ class _CaptainCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(candidato.nombre, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        candidato.nombre,
+                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (etiquetaEstadoJugador(candidato.estado) != null) ...[
+                      const SizedBox(width: 6),
+                      PlayerStatusBadge(estado: candidato.estado),
+                    ],
+                  ],
+                ),
                 const SizedBox(height: 2),
                 Text(
                   candidato.proximoRival != null
@@ -2729,7 +2787,21 @@ class _BargainCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(chollo.nombre, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        chollo.nombre,
+                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (etiquetaEstadoJugador(chollo.estado) != null) ...[
+                      const SizedBox(width: 6),
+                      PlayerStatusBadge(estado: chollo.estado),
+                    ],
+                  ],
+                ),
                 const SizedBox(height: 2),
                 Text(
                   '${equipoLabel(chollo.equipo)} · ${(chollo.precio / 1000000).toStringAsFixed(2)} M€',
@@ -2837,7 +2909,21 @@ class _PlayerCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(player.nombre, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            player.nombre,
+                            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (etiquetaEstadoJugador(player.estado) != null) ...[
+                          const SizedBox(width: 6),
+                          PlayerStatusBadge(estado: player.estado),
+                        ],
+                      ],
+                    ),
                     const SizedBox(height: 2),
                     Text(equipoLabel(player.equipo), style: const TextStyle(fontSize: 13, color: kTextSecondary)),
                   ],
@@ -3120,6 +3206,10 @@ class _PrediccionScreenState extends State<PrediccionScreen> {
                             '${(widget.player.precio / 1000000).toStringAsFixed(2)} M€',
                             style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
                           ),
+                          if (etiquetaEstadoJugador(widget.player.estado) != null) ...[
+                            const SizedBox(height: 8),
+                            PlayerStatusBadge(estado: widget.player.estado),
+                          ],
                         ],
                       ),
                     ),
@@ -3127,6 +3217,7 @@ class _PrediccionScreenState extends State<PrediccionScreen> {
                 ),
               ),
             ),
+            PlayerStatusInfo(estado: widget.player.estado, estadoInfo: widget.player.estadoInfo),
             const SizedBox(height: 14),
             _buildBotonPlantilla(context),
             if (!kIsWeb) ...[
@@ -3285,7 +3376,17 @@ class _LineupScreenState extends State<LineupScreen> {
         for (final j in titulares) {
           if (_fijos.any((p) => p.id == j.id)) continue;
           _fijos.add(
-            Player(id: j.id, source: j.source, nombre: j.nombre, equipo: j.equipo, posicion: j.posicion, precio: j.precio, fotoUrl: j.fotoUrl),
+            Player(
+              id: j.id,
+              source: j.source,
+              nombre: j.nombre,
+              equipo: j.equipo,
+              posicion: j.posicion,
+              precio: j.precio,
+              fotoUrl: j.fotoUrl,
+              estado: j.estado,
+              estadoInfo: j.estadoInfo,
+            ),
           );
         }
       });
@@ -3511,7 +3612,21 @@ class _LineupScreenState extends State<LineupScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(j.nombre, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            j.nombre,
+                            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (etiquetaEstadoJugador(j.estado) != null) ...[
+                          const SizedBox(width: 6),
+                          PlayerStatusBadge(estado: j.estado),
+                        ],
+                      ],
+                    ),
                     const SizedBox(height: 2),
                     Text(
                       '${equipoLabel(j.equipo)} · ${j.puntosEsperados.toStringAsFixed(1)} pts',

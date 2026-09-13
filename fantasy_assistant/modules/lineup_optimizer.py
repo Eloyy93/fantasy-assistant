@@ -58,6 +58,8 @@ class LineupPlayer:
     precio: int
     puntos_esperados: float
     foto_url: str = ""
+    estado: str = "ok"
+    estado_info: str | None = None
 
 
 @dataclass
@@ -104,6 +106,13 @@ def _candidatos_por_posicion(
     for p in rows:
         if p.precio <= 0:
             continue
+        # Un jugador lesionado o sancionado no va a puntuar esta jornada —
+        # recomendarlo en el once ideal sería un consejo inútil aunque su
+        # media de puntos previa sea buena. "doubt" (duda) sí se deja pasar:
+        # puede llegar a jugar, y descartarlo de raíz sería demasiado
+        # conservador.
+        if p.estado in ("injured", "sanctioned", "discarded"):
+            continue
         candidatos[p.posicion].append(
             LineupPlayer(
                 player_id=p.id,
@@ -113,6 +122,8 @@ def _candidatos_por_posicion(
                 precio=p.precio,
                 puntos_esperados=puntos_por_jugador.get(p.id, 0.0),
                 foto_url=p.foto_url,
+                estado=p.estado,
+                estado_info=p.estado_info,
             )
         )
 
@@ -315,6 +326,8 @@ def _resolver_fijos(session, fijos: list[str], source: str) -> list[LineupPlayer
                 precio=player.precio,
                 puntos_esperados=puntos_por_jugador.get(player.id, 0.0),
                 foto_url=player.foto_url,
+                estado=player.estado,
+                estado_info=player.estado_info,
             )
         )
     return resultado

@@ -11,6 +11,8 @@ class PlayerOut(BaseModel):
     posicion: str
     precio: int
     foto_url: str = ""
+    estado: str = "ok"
+    estado_info: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -53,6 +55,8 @@ class BargainOut(BaseModel):
     ratio: float
     zscore: float
     foto_url: str = ""
+    estado: str = "ok"
+    estado_info: str | None = None
 
 
 class CaptainOut(BaseModel):
@@ -61,6 +65,8 @@ class CaptainOut(BaseModel):
     equipo: str
     posicion: str
     foto_url: str = ""
+    estado: str = "ok"
+    estado_info: str | None = None
     puntos_esperados: float
     score: float
     proximo_rival: str | None = None
@@ -80,6 +86,8 @@ class LineupPlayerOut(BaseModel):
     precio: int
     puntos_esperados: float
     foto_url: str = ""
+    estado: str = "ok"
+    estado_info: str | None = None
 
 
 class OptimizedLineupOut(BaseModel):
@@ -125,6 +133,8 @@ class TeamPlayerOut(BaseModel):
     puntos_temporada: int
     slot: str | None = None
     foto_url: str = ""
+    estado: str = "ok"
+    estado_info: str | None = None
 
 
 class FormationIn(BaseModel):
@@ -156,6 +166,8 @@ class ComparePlayerOut(BaseModel):
     posicion: str
     precio: int
     foto_url: str = ""
+    estado: str = "ok"
+    estado_info: str | None = None
     variacion_precio: int | None = None
     puntos_recientes: list[PointsEntryOut]
     puntos_temporada: int

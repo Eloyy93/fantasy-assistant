@@ -29,3 +29,14 @@
 -dontwarn com.google.mlkit.vision.text.devanagari.**
 -dontwarn com.google.mlkit.vision.text.japanese.**
 -dontwarn com.google.mlkit.vision.text.korean.**
+
+# Las clases internas de mlkit_vision_common (com.google.android.gms.internal.
+# mlkit_vision_common.zz*) se construyen por reflexión — sin -keep, R8 las
+# ofusca/reordena y el proceso de reconocimiento crashea en release (nunca en
+# debug) con NullPointerException al llamar a getClass() sobre un objeto que
+# debería haberse creado por esa vía. Crash real reproducido en producción.
+-keep class com.google.mlkit.vision.text.** { *; }
+-keep class com.google.mlkit.vision.common.** { *; }
+-keep class com.google.android.gms.internal.mlkit_vision_text_common.** { *; }
+-keep class com.google.android.gms.internal.mlkit_vision_common.** { *; }
+-dontwarn com.google.mlkit.vision.common.**

@@ -90,6 +90,8 @@ class BiwengerAdapter(FantasyDataSource):
                     equipo=team.get("name", ""),
                     posicion=POSITION_MAP.get(raw.get("position"), "UNK"),
                     precio=raw.get("price") or 0,
+                    estado=raw.get("status") or "ok",
+                    estado_info=raw.get("statusInfo"),
                 )
             )
         return players

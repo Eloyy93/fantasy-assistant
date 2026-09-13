@@ -37,6 +37,8 @@ class Player {
   final String posicion;
   final int precio;
   final String fotoUrl;
+  final String estado;
+  final String? estadoInfo;
 
   Player({
     required this.id,
@@ -46,6 +48,8 @@ class Player {
     required this.posicion,
     required this.precio,
     this.fotoUrl = '',
+    this.estado = 'ok',
+    this.estadoInfo,
   });
 
   factory Player.fromJson(Map<String, dynamic> json) {
@@ -57,6 +61,8 @@ class Player {
       posicion: json['posicion'] as String,
       precio: json['precio'] as int,
       fotoUrl: json['foto_url'] as String? ?? '',
+      estado: json['estado'] as String? ?? 'ok',
+      estadoInfo: json['estado_info'] as String?,
     );
   }
 }
@@ -92,6 +98,8 @@ class LineupPlayer {
   final int precio;
   final double puntosEsperados;
   final String fotoUrl;
+  final String estado;
+  final String? estadoInfo;
 
   LineupPlayer({
     required this.playerId,
@@ -101,6 +109,8 @@ class LineupPlayer {
     required this.precio,
     required this.puntosEsperados,
     this.fotoUrl = '',
+    this.estado = 'ok',
+    this.estadoInfo,
   });
 
   factory LineupPlayer.fromJson(Map<String, dynamic> json) {
@@ -112,6 +122,8 @@ class LineupPlayer {
       precio: json['precio'] as int,
       puntosEsperados: (json['puntos_esperados'] as num).toDouble(),
       fotoUrl: json['foto_url'] as String? ?? '',
+      estado: json['estado'] as String? ?? 'ok',
+      estadoInfo: json['estado_info'] as String?,
     );
   }
 }
@@ -196,6 +208,8 @@ class TeamPlayer {
   final int puntosTemporada;
   final String? slot;
   final String fotoUrl;
+  final String estado;
+  final String? estadoInfo;
 
   TeamPlayer({
     required this.id,
@@ -209,6 +223,8 @@ class TeamPlayer {
     required this.puntosTemporada,
     this.slot,
     this.fotoUrl = '',
+    this.estado = 'ok',
+    this.estadoInfo,
   });
 
   factory TeamPlayer.fromJson(Map<String, dynamic> json) {
@@ -224,6 +240,8 @@ class TeamPlayer {
       puntosTemporada: json['puntos_temporada'] as int,
       slot: json['slot'] as String?,
       fotoUrl: json['foto_url'] as String? ?? '',
+      estado: json['estado'] as String? ?? 'ok',
+      estadoInfo: json['estado_info'] as String?,
     );
   }
 }
@@ -265,6 +283,8 @@ class ComparePlayer {
   final String posicion;
   final int precio;
   final String fotoUrl;
+  final String estado;
+  final String? estadoInfo;
   final int? variacionPrecio;
   final List<PointsEntry> puntosRecientes;
   final int puntosTemporada;
@@ -279,6 +299,8 @@ class ComparePlayer {
     required this.posicion,
     required this.precio,
     required this.fotoUrl,
+    this.estado = 'ok',
+    this.estadoInfo,
     required this.variacionPrecio,
     required this.puntosRecientes,
     required this.puntosTemporada,
@@ -295,6 +317,8 @@ class ComparePlayer {
       posicion: json['posicion'] as String,
       precio: json['precio'] as int,
       fotoUrl: json['foto_url'] as String? ?? '',
+      estado: json['estado'] as String? ?? 'ok',
+      estadoInfo: json['estado_info'] as String?,
       variacionPrecio: json['variacion_precio'] as int?,
       puntosRecientes: (json['puntos_recientes'] as List<dynamic>)
           .map((e) => PointsEntry.fromJson(e as Map<String, dynamic>))
@@ -318,6 +342,8 @@ class Bargain {
   final double ratio;
   final double zscore;
   final String fotoUrl;
+  final String estado;
+  final String? estadoInfo;
 
   Bargain({
     required this.id,
@@ -329,6 +355,8 @@ class Bargain {
     required this.ratio,
     required this.zscore,
     this.fotoUrl = '',
+    this.estado = 'ok',
+    this.estadoInfo,
   });
 
   factory Bargain.fromJson(Map<String, dynamic> json) {
@@ -342,6 +370,8 @@ class Bargain {
       ratio: (json['ratio'] as num).toDouble(),
       zscore: (json['zscore'] as num).toDouble(),
       fotoUrl: json['foto_url'] as String? ?? '',
+      estado: json['estado'] as String? ?? 'ok',
+      estadoInfo: json['estado_info'] as String?,
     );
   }
 }
@@ -352,6 +382,8 @@ class CaptainCandidate {
   final String equipo;
   final String posicion;
   final String fotoUrl;
+  final String estado;
+  final String? estadoInfo;
   final double puntosEsperados;
   final double score;
   final String? proximoRival;
@@ -363,6 +395,8 @@ class CaptainCandidate {
     required this.equipo,
     required this.posicion,
     this.fotoUrl = '',
+    this.estado = 'ok',
+    this.estadoInfo,
     required this.puntosEsperados,
     required this.score,
     this.proximoRival,
@@ -376,6 +410,8 @@ class CaptainCandidate {
       equipo: json['equipo'] as String,
       posicion: json['posicion'] as String,
       fotoUrl: json['foto_url'] as String? ?? '',
+      estado: json['estado'] as String? ?? 'ok',
+      estadoInfo: json['estado_info'] as String?,
       puntosEsperados: (json['puntos_esperados'] as num).toDouble(),
       score: (json['score'] as num).toDouble(),
       proximoRival: json['proximo_rival'] as String?,

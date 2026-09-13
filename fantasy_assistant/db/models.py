@@ -24,6 +24,11 @@ class PlayerRecord(Base):
     equipo: Mapped[str] = mapped_column(String)
     posicion: Mapped[str] = mapped_column(String)
     precio: Mapped[int] = mapped_column(Integer, default=0)
+    # ok | doubt | injured | sanctioned | discarded | unknown — ver
+    # Player.estado en datasources/base.py. server_default para que las filas
+    # ya existentes (creadas antes de esta columna) no queden con NULL.
+    estado: Mapped[str] = mapped_column(String, default="ok", server_default="ok")
+    estado_info: Mapped[str | None] = mapped_column(String, nullable=True)
 
     price_history: Mapped[list["PriceHistory"]] = relationship(back_populates="player", cascade="all, delete-orphan")
     points_history: Mapped[list["PointsHistory"]] = relationship(back_populates="player", cascade="all, delete-orphan")

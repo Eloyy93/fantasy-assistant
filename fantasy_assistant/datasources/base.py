@@ -17,6 +17,13 @@ class Player:
     equipo: str
     posicion: str  # POR | DEF | MED | DEL
     precio: int
+    # ok | doubt | injured | sanctioned | discarded | unknown (valores de
+    # Biwenger; LaLiga Fantasy no lo scrapea hoy, así que siempre da "ok").
+    estado: str = "ok"
+    # Texto libre de la fuente describiendo el motivo/retorno estimado, ej.
+    # "Lesión muscular. Retorno estimado: Mediados de Septiembre." None si
+    # no hay incidencia o la fuente no lo da.
+    estado_info: str | None = None
 
 
 @dataclass

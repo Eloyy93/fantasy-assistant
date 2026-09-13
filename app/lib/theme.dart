@@ -192,6 +192,105 @@ class PlayerAvatar extends StatelessWidget {
   }
 }
 
+/// Texto corto en español para cada valor de `estado` que da la fuente
+/// (Biwenger; LaLiga Fantasy no lo scrapea hoy y siempre manda "ok").
+/// "ok" y "unknown" no se muestran — solo interesa avisar cuando el
+/// jugador tiene alguna incidencia real.
+String? etiquetaEstadoJugador(String estado) {
+  switch (estado) {
+    case 'injured':
+      return 'Lesionado';
+    case 'doubt':
+      return 'Duda';
+    case 'sanctioned':
+      return 'Sancionado';
+    case 'discarded':
+      return 'Descartado';
+    default:
+      return null;
+  }
+}
+
+Color colorForEstadoJugador(String estado) {
+  switch (estado) {
+    case 'injured':
+      return const Color(0xFFEF5350);
+    case 'doubt':
+      return const Color(0xFFFFA726);
+    case 'sanctioned':
+      return const Color(0xFFAB47BC);
+    case 'discarded':
+      return kTextTertiary;
+    default:
+      return kMintAccent;
+  }
+}
+
+/// Pastilla compacta ("Lesionado", "Duda", "Sancionado"...) para mostrar
+/// junto al nombre de un jugador — no se renderiza nada si su estado es
+/// "ok"/"unknown" (caso normal, no hay que avisar de nada). Para el motivo
+/// y retorno estimado (texto libre de la fuente) usa [PlayerStatusInfo]
+/// en la ficha de detalle, donde sí hay espacio.
+class PlayerStatusBadge extends StatelessWidget {
+  final String estado;
+
+  const PlayerStatusBadge({super.key, required this.estado});
+
+  @override
+  Widget build(BuildContext context) {
+    final etiqueta = etiquetaEstadoJugador(estado);
+    if (etiqueta == null) return const SizedBox.shrink();
+    final color = colorForEstadoJugador(estado);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Text(
+        etiqueta,
+        style: TextStyle(color: color, fontSize: 10.5, fontWeight: FontWeight.w700, letterSpacing: 0.1),
+      ),
+    );
+  }
+}
+
+/// Motivo/retorno estimado que da la fuente (ej. "Lesión muscular. Retorno
+/// estimado: Mediados de Septiembre.") — solo se muestra si hay
+/// [estadoInfo], y solo tiene sentido en pantallas con espacio de sobra
+/// (ficha de detalle), no en las listas compactas donde va [PlayerStatusBadge].
+class PlayerStatusInfo extends StatelessWidget {
+  final String estado;
+  final String? estadoInfo;
+
+  const PlayerStatusInfo({super.key, required this.estado, required this.estadoInfo});
+
+  @override
+  Widget build(BuildContext context) {
+    final info = estadoInfo?.trim();
+    if (info == null || info.isEmpty) return const SizedBox.shrink();
+    final color = colorForEstadoJugador(estado);
+    return Container(
+      margin: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.info_outline_rounded, color: color, size: 18),
+          const SizedBox(width: 8),
+          Expanded(child: Text(info, style: TextStyle(color: color, fontSize: 13, height: 1.3))),
+        ],
+      ),
+    );
+  }
+}
+
 /// Una pequeña estadística en formato "etiqueta arriba, valor grande abajo",
 /// usada para desglosar resultados (formación, puntos, presupuesto...) en
 /// vez de meterlo todo en un párrafo de texto corrido.

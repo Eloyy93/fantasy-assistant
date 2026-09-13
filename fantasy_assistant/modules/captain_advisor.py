@@ -39,6 +39,8 @@ class CaptainCandidate:
     equipo: str
     posicion: str
     foto_url: str
+    estado: str
+    estado_info: str | None
     puntos_esperados: float
     score: float
     proximo_rival: str | None
@@ -118,6 +120,8 @@ def recomendar_capitan(session, owner_id: str, source: str) -> list[CaptainCandi
                 equipo=player.equipo,
                 posicion=player.posicion,
                 foto_url=player.foto_url,
+                estado=player.estado,
+                estado_info=player.estado_info,
                 puntos_esperados=round(puntos_esperados, 1),
                 score=round(score, 2),
                 proximo_rival=proximo_rival,

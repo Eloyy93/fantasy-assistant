@@ -79,6 +79,8 @@ def sync_once(source: FantasyDataSource | None = None) -> int:
                     existing.equipo = p.equipo
                     existing.posicion = p.posicion
                     existing.precio = p.precio
+                    existing.estado = p.estado
+                    existing.estado_info = p.estado_info
                 else:
                     session.add(
                         PlayerRecord(
@@ -89,6 +91,8 @@ def sync_once(source: FantasyDataSource | None = None) -> int:
                             equipo=p.equipo,
                             posicion=p.posicion,
                             precio=p.precio,
+                            estado=p.estado,
+                            estado_info=p.estado_info,
                         )
                     )
 
