@@ -35,8 +35,21 @@
 # ofusca/reordena y el proceso de reconocimiento crashea en release (nunca en
 # debug) con NullPointerException al llamar a getClass() sobre un objeto que
 # debería haberse creado por esa vía. Crash real reproducido en producción.
--keep class com.google.mlkit.vision.text.** { *; }
--keep class com.google.mlkit.vision.common.** { *; }
+#
+# Un primer intento con -keep solo sobre vision.text/vision.common causó un
+# crash NUEVO y peor: la app se cerraba al abrir, siempre, no solo al usar
+# OCR — porque MlKitInitProvider (un ContentProvider que arranca con la app,
+# antes de que se pinte nada) inicializa por reflexión TODOS los componentes
+# de visión registrados, y uno de sus dependencias intermedias quedaba
+# ofuscada igualmente ("Unsatisfied dependency ... np", visto con adb logcat
+# en dispositivo real). La única forma fiable de que R8 no rompa esta cadena
+# de reflexión es no tocar NINGUNA clase de com.google.mlkit ni de sus
+# paquetes internos de gms, en vez de intentar adivinar cada símbolo.
+-keep class com.google.mlkit.** { *; }
 -keep class com.google.android.gms.internal.mlkit_vision_text_common.** { *; }
+-keep class com.google.android.gms.internal.mlkit_vision_text_bundled_common.** { *; }
 -keep class com.google.android.gms.internal.mlkit_vision_common.** { *; }
--dontwarn com.google.mlkit.vision.common.**
+-keep class com.google.android.gms.internal.mlkit_common.** { *; }
+-keep class com.google.android.odml.image.** { *; }
+-dontwarn com.google.mlkit.**
+-dontwarn com.google.android.odml.**
