@@ -60,7 +60,16 @@ List<CandidatoEscaneado> emparejarJugadores(List<String> lineasTexto, List<Playe
     final normalizada = _normalizar(_quitarPuntosSuspensivos(lineaOriginal));
     if (normalizada.length < 3) continue;
 
-    final todasLasPalabras = normalizada.split(' ').where((p) => p.isNotEmpty).toList();
+    // ML Kit a menudo funde en una sola "línea" el nombre con texto que
+    // está pegado o muy cerca visualmente (precio, puntos, dorsal, código
+    // de equipo) — esos tokens son mayoritariamente dígitos, así que se
+    // descartan aquí. Sin este filtro, un precio como "18,5M" se colaba
+    // como palabra a exigir en el nombre del jugador y rompía la
+    // coincidencia de la línea entera, aunque el nombre en sí estuviera
+    // bien leído. Ojo: NO se descarta cualquier token con un dígito suelto
+    // (ej. "s0rloth", donde el OCR confundió una "o" con un "0" dentro del
+    // propio nombre) — solo cuando los dígitos son mayoría del token.
+    final todasLasPalabras = normalizada.split(' ').where((p) => p.isNotEmpty && !_esRuidoNumerico(p)).toList();
     if (todasLasPalabras.isEmpty) continue;
 
     // Con una sola palabra en la línea, se exige que sea una palabra
@@ -138,12 +147,21 @@ List<Player> _buscarCompatibles(
   Map<String, List<String>> palabrasPorJugador,
 ) {
   if (palabrasCompletas.isEmpty && (prefijo == null || prefijo.length < 3)) return const [];
+  // Se tolera como máximo UNA palabra de la línea (completa o el prefijo
+  // final) que no encaje con nada del nombre — texto pegado que el paso
+  // anterior no pudo filtrar por no ser numérico (ej. un código de
+  // equipo de 3 letras tipo "RMA" al final de la línea) no debería tirar
+  // por tierra el resto de la línea si las demás palabras sí encajan bien.
+  final totalTokens = palabrasCompletas.length + (prefijo != null ? 1 : 0);
+  final tolerablesRuido = totalTokens >= 2 ? 1 : 0;
   final compatibles = <Player>[];
   for (final jugador in jugadores) {
     final palabrasNombre = palabrasPorJugador[jugador.id]!;
     if (palabrasNombre.isEmpty) continue;
-    if (!palabrasCompletas.every((p) => palabrasNombre.any((w) => _palabraCompatible(w, p)))) continue;
-    if (prefijo != null && !palabrasNombre.any((w) => _prefijoCompatible(w, prefijo))) continue;
+    var noEncajan = palabrasCompletas.where((p) => !palabrasNombre.any((w) => _palabraCompatible(w, p))).length;
+    final prefijoEncaja = prefijo == null || palabrasNombre.any((w) => _prefijoCompatible(w, prefijo));
+    if (!prefijoEncaja) noEncajan++;
+    if (noEncajan > tolerablesRuido || noEncajan == totalTokens) continue;
     if (inicial != null && !palabrasNombre.any((w) => w.startsWith(inicial))) continue;
     compatibles.add(jugador);
   }
@@ -213,6 +231,11 @@ int _distanciaEdicion(String a, String b) {
     filaAnterior = filaActual;
   }
   return filaAnterior[b.length];
+}
+
+bool _esRuidoNumerico(String p) {
+  final digitos = p.replaceAll(RegExp(r'[^0-9]'), '').length;
+  return digitos >= p.length - digitos;
 }
 
 String _quitarPuntosSuspensivos(String texto) {

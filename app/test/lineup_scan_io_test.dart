@@ -41,6 +41,16 @@ void main() {
     expect(candidatos.any((c) => c.jugador.id == '5'), isTrue);
   });
 
+  test('un precio pegado al nombre no rompe la coincidencia (Diego Costa 18,5M)', () {
+    final candidatos = emparejarJugadores(['Diego Costa 18,5M'], mercado);
+    expect(candidatos.any((c) => c.jugador.id == '4'), isTrue);
+  });
+
+  test('un código de equipo pegado al nombre no rompe la coincidencia (Alexander Sørloth RMA)', () {
+    final candidatos = emparejarJugadores(['Alexander Sørloth RMA'], mercado);
+    expect(candidatos.any((c) => c.jugador.id == '2'), isTrue);
+  });
+
   test('apellido ambiguo entre varios jugadores baja la confianza pero no los descarta', () {
     final candidatos = emparejarJugadores(['Romero'], mercado);
     final ids = candidatos.map((c) => c.jugador.id).toSet();
