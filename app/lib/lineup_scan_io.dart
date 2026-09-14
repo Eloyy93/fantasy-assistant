@@ -124,10 +124,12 @@ List<CandidatoEscaneado> emparejarJugadores(List<String> lineasTexto, List<Playe
 
 /// Jugadores del mercado compatibles con las palabras reconocidas: cada
 /// palabra de [palabrasCompletas] tiene que ser una palabra real de su
-/// nombre, si hay [prefijo] el nombre tiene que tener alguna palabra que
-/// empiece por él, y si hay [inicial] (letra suelta del nombre de pila
-/// abreviado) el nombre tiene que tener alguna palabra que empiece por
-/// esa letra.
+/// nombre (o parecerse lo bastante — ver [_palabraCompatible], para
+/// tolerar errores típicos de OCR como confundir letras parecidas), si
+/// hay [prefijo] el nombre tiene que tener alguna palabra que empiece por
+/// él (con el mismo margen de tolerancia), y si hay [inicial] (letra
+/// suelta del nombre de pila abreviado) el nombre tiene que tener alguna
+/// palabra que empiece por esa letra.
 List<Player> _buscarCompatibles(
   Set<String> palabrasCompletas,
   String? prefijo,
@@ -140,13 +142,77 @@ List<Player> _buscarCompatibles(
   for (final jugador in jugadores) {
     final palabrasNombre = palabrasPorJugador[jugador.id]!;
     if (palabrasNombre.isEmpty) continue;
-    final nombreSet = palabrasNombre.toSet();
-    if (!palabrasCompletas.every(nombreSet.contains)) continue;
-    if (prefijo != null && !palabrasNombre.any((w) => w.startsWith(prefijo))) continue;
+    if (!palabrasCompletas.every((p) => palabrasNombre.any((w) => _palabraCompatible(w, p)))) continue;
+    if (prefijo != null && !palabrasNombre.any((w) => _prefijoCompatible(w, prefijo))) continue;
     if (inicial != null && !palabrasNombre.any((w) => w.startsWith(inicial))) continue;
     compatibles.add(jugador);
   }
   return compatibles;
+}
+
+/// Cuántos errores de OCR (letra sustituida/perdida/añadida) se toleran
+/// según la longitud del texto — 0 para palabras muy cortas (ahí
+/// cualquier tolerancia coincidiría con casi cualquier cosa), 1 para las
+/// típicas de nombre/apellido, 2 para las largas (más margen para que el
+/// OCR se equivoque en más de una letra sin perder la coincidencia).
+int _tolerancia(int longitud) {
+  // <=5: 0 — en palabras cortas, tolerar 1 error confundiría nombres
+  // reales distintos entre sí (ej. "Pedro" vs "Pedri", distancia 1).
+  if (longitud <= 5) return 0;
+  if (longitud <= 8) return 1;
+  return 2;
+}
+
+/// true si [palabraNombre] (del mercado) y [palabraTexto] (leída por OCR)
+/// son la misma palabra o se parecen lo bastante como para asumir que el
+/// OCR se equivocó en alguna letra — ej. "Rodrygo" vs "Rodrigo" (leído
+/// con la "y" confundida), o "S0rloth" vs "Sorloth" (un "0" en vez de
+/// "o"). Antes se exigía coincidencia exacta de la palabra completa, lo
+/// que hacía perder jugadores que sí estaban en la captura solo porque el
+/// OCR leyó una letra mal.
+bool _palabraCompatible(String palabraNombre, String palabraTexto) {
+  if (palabraNombre == palabraTexto) return true;
+  // Distingue longitudes muy distintas antes de calcular la distancia —
+  // evita, por ejemplo, que "gol" cuele como parecido a "goles" con la
+  // tolerancia de una palabra larga.
+  if ((palabraNombre.length - palabraTexto.length).abs() > _tolerancia(palabraTexto.length)) return false;
+  return _distanciaEdicion(palabraNombre, palabraTexto) <= _tolerancia(palabraTexto.length);
+}
+
+/// Igual que [_palabraCompatible] pero para el prefijo truncado (nombre
+/// cortado por la interfaz, ej. "Diego Co..." por "Diego Costa") — compara
+/// el prefijo contra el trozo inicial de la misma longitud de la palabra
+/// del mercado, con el mismo margen de tolerancia a errores de OCR.
+bool _prefijoCompatible(String palabraNombre, String prefijo) {
+  if (palabraNombre.startsWith(prefijo)) return true;
+  if (prefijo.length > palabraNombre.length) return false;
+  final inicioNombre = palabraNombre.substring(0, prefijo.length);
+  return _distanciaEdicion(inicioNombre, prefijo) <= _tolerancia(prefijo.length);
+}
+
+/// Distancia de Levenshtein clásica (mínimo de sustituciones/inserciones/
+/// borrados para convertir [a] en [b]) — programación dinámica con dos
+/// filas, sin necesitar la matriz completa ya que las palabras son cortas.
+int _distanciaEdicion(String a, String b) {
+  if (a == b) return 0;
+  if (a.isEmpty) return b.length;
+  if (b.isEmpty) return a.length;
+
+  var filaAnterior = List<int>.generate(b.length + 1, (j) => j);
+  for (var i = 1; i <= a.length; i++) {
+    final filaActual = List<int>.filled(b.length + 1, 0);
+    filaActual[0] = i;
+    for (var j = 1; j <= b.length; j++) {
+      final costoSustitucion = a[i - 1] == b[j - 1] ? 0 : 1;
+      filaActual[j] = [
+        filaActual[j - 1] + 1, // inserción
+        filaAnterior[j] + 1, // borrado
+        filaAnterior[j - 1] + costoSustitucion, // sustitución
+      ].reduce((x, y) => x < y ? x : y);
+    }
+    filaAnterior = filaActual;
+  }
+  return filaAnterior[b.length];
 }
 
 String _quitarPuntosSuspensivos(String texto) {
@@ -157,8 +223,14 @@ String _quitarPuntosSuspensivos(String texto) {
 }
 
 String _normalizar(String texto) {
-  const conAcento = 'áéíóúüñÁÉÍÓÚÜÑ';
-  const sinAcento = 'aeiouunAEIOUUN';
+  // Además de los acentos españoles, algunos jugadores extranjeros de
+  // LaLiga tienen letras nórdicas/centroeuropeas en el nombre (ej.
+  // "Alexander Sørloth", "Isak") — sin mapearlas aquí, el reemplazo
+  // genérico de _normalizar las convertía en un espacio (caracter no
+  // alfanumérico), partiendo la palabra en dos y rompiendo la
+  // coincidencia con un jugador que sí estaba en la captura.
+  const conAcento = 'áéíóúüñÁÉÍÓÚÜÑøØåÅäÄöÖçÇ';
+  const sinAcento = 'aeiouunAEIOUUNoOaAaAoOcC';
   var resultado = texto.toLowerCase();
   for (var i = 0; i < conAcento.length; i++) {
     resultado = resultado.replaceAll(conAcento[i], sinAcento[i].toLowerCase());
