@@ -193,10 +193,12 @@ class PlayerAvatar extends StatelessWidget {
 }
 
 /// Texto corto en español para cada valor de `estado` que da la fuente
-/// (Biwenger; LaLiga Fantasy no lo scrapea hoy y siempre manda "ok").
-/// "ok" y "unknown" no se muestran — solo interesa avisar cuando el
-/// jugador tiene alguna incidencia real.
-String? etiquetaEstadoJugador(String estado) {
+/// (hoy: Biwenger directamente, y LaLiga Fantasy por contagio desde
+/// Biwenger — ver `_propagar_estado_entre_fuentes` en sync_data.py, ya que
+/// el estado físico de un jugador real es el mismo sea cual sea la fuente
+/// de precios/puntos). "unknown" se trata como disponible: es el valor que
+/// da Biwenger para jugadores sin ninguna incidencia registrada.
+String etiquetaEstadoJugador(String estado) {
   switch (estado) {
     case 'injured':
       return 'Lesionado';
@@ -207,9 +209,15 @@ String? etiquetaEstadoJugador(String estado) {
     case 'discarded':
       return 'Descartado';
     default:
-      return null;
+      return 'Disponible';
   }
 }
+
+/// true si el estado es una incidencia real (no "disponible") — para los
+/// sitios donde solo interesa avisar cuando hay algo que contar (ej. la
+/// fila "Estado" del comparador, que antes se ocultaba entera si ninguno
+/// de los dos jugadores tenía incidencia).
+bool tieneIncidenciaFisica(String estado) => estado == 'injured' || estado == 'doubt' || estado == 'sanctioned' || estado == 'discarded';
 
 Color colorForEstadoJugador(String estado) {
   switch (estado) {
@@ -226,11 +234,50 @@ Color colorForEstadoJugador(String estado) {
   }
 }
 
-/// Pastilla compacta ("Lesionado", "Duda", "Sancionado"...) para mostrar
-/// junto al nombre de un jugador — no se renderiza nada si su estado es
-/// "ok"/"unknown" (caso normal, no hay que avisar de nada). Para el motivo
-/// y retorno estimado (texto libre de la fuente) usa [PlayerStatusInfo]
-/// en la ficha de detalle, donde sí hay espacio.
+IconData iconoEstadoJugador(String estado) {
+  switch (estado) {
+    case 'injured':
+      return Icons.local_hospital_rounded;
+    case 'doubt':
+      return Icons.help_rounded;
+    case 'sanctioned':
+      return Icons.block_rounded;
+    case 'discarded':
+      return Icons.remove_circle_rounded;
+    default:
+      return Icons.check_circle_rounded;
+  }
+}
+
+/// Icono compacto de disponibilidad (lesionado/duda/sancionado/descartado/
+/// disponible) para poner junto al nombre en listas — mantener pulsado (o
+/// pasar el ratón, en escritorio) enseña el motivo y retorno estimado si
+/// la fuente lo da. Pensado para caber en una fila sin empujar el resto
+/// del contenido, a diferencia de [PlayerStatusBadge].
+class PlayerStatusIcon extends StatelessWidget {
+  final String estado;
+  final String? estadoInfo;
+  final double size;
+
+  const PlayerStatusIcon({super.key, required this.estado, this.estadoInfo, this.size = 16});
+
+  @override
+  Widget build(BuildContext context) {
+    final titulo = etiquetaEstadoJugador(estado);
+    final info = estadoInfo?.trim();
+    final mensaje = (info != null && info.isNotEmpty) ? '$titulo — $info' : titulo;
+    return Tooltip(
+      message: mensaje,
+      triggerMode: TooltipTriggerMode.tap,
+      child: Icon(iconoEstadoJugador(estado), color: colorForEstadoJugador(estado), size: size),
+    );
+  }
+}
+
+/// Pastilla ("Lesionado", "Duda", "Disponible"...) con icono, para la
+/// ficha de detalle del jugador donde sí hay espacio de sobra — en listas
+/// compactas usa [PlayerStatusIcon]. Para el motivo y retorno estimado
+/// (texto libre de la fuente) usa [PlayerStatusInfo] justo debajo.
 class PlayerStatusBadge extends StatelessWidget {
   final String estado;
 
@@ -238,19 +285,24 @@ class PlayerStatusBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final etiqueta = etiquetaEstadoJugador(estado);
-    if (etiqueta == null) return const SizedBox.shrink();
     final color = colorForEstadoJugador(estado);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.16),
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(color: color.withValues(alpha: 0.35)),
       ),
-      child: Text(
-        etiqueta,
-        style: TextStyle(color: color, fontSize: 10.5, fontWeight: FontWeight.w700, letterSpacing: 0.1),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(iconoEstadoJugador(estado), color: color, size: 13),
+          const SizedBox(width: 4),
+          Text(
+            etiquetaEstadoJugador(estado),
+            style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.1),
+          ),
+        ],
       ),
     );
   }

@@ -10,6 +10,7 @@ import argparse
 import datetime as dt
 import logging
 import random
+import unicodedata
 
 from sqlalchemy import select
 
@@ -261,6 +262,47 @@ def _upsert_points(session, player_id: str, source: str, jornada: int, puntos: i
     session.execute(stmt)
 
 
+def _normalizar_nombre(nombre: str) -> str:
+    sin_acentos = unicodedata.normalize("NFKD", nombre).encode("ascii", "ignore").decode("ascii")
+    return sin_acentos.strip().lower()
+
+
+def _propagar_estado_entre_fuentes(session) -> None:
+    """El estado físico (lesionado/duda/sancionado + motivo/retorno
+    estimado) es el mismo para el jugador real sea cual sea la fuente,
+    pero solo Biwenger lo da — LaLiga Fantasy scrapea futbolfantasy.com,
+    que no lo expone. En vez de duplicar el scraping en la otra fuente, se
+    copia aquí por nombre normalizado (sin acentos/mayúsculas) una vez que
+    ambas fuentes ya están sincronizadas.
+
+    Si dos jugadores de Biwenger comparten el mismo nombre normalizado
+    (raro, pero pasa con apellidos comunes) se descarta ESE nombre entero
+    en vez de arriesgarse a copiar el estado de uno al otro — no tener el
+    dato es mejor que tener el equivocado."""
+    biwenger = session.execute(select(PlayerRecord).where(PlayerRecord.source == "biwenger")).scalars().all()
+
+    candidatos: dict[str, list[PlayerRecord]] = {}
+    for p in biwenger:
+        candidatos.setdefault(_normalizar_nombre(p.nombre), []).append(p)
+    estado_por_nombre = {
+        nombre: (grupo[0].estado, grupo[0].estado_info) for nombre, grupo in candidatos.items() if len(grupo) == 1
+    }
+
+    otras_fuentes = session.execute(select(PlayerRecord).where(PlayerRecord.source != "biwenger")).scalars().all()
+    actualizados = 0
+    for p in otras_fuentes:
+        match = estado_por_nombre.get(_normalizar_nombre(p.nombre))
+        if not match:
+            continue
+        estado, estado_info = match
+        if p.estado != estado or p.estado_info != estado_info:
+            p.estado, p.estado_info = estado, estado_info
+            actualizados += 1
+    session.commit()
+    if actualizados:
+        logger.info("Estado físico propagado desde Biwenger a %d jugador(es) de otras fuentes", actualizados)
+
+
 def sync_all_sources() -> None:
     """Sincroniza TODAS las fuentes soportadas (Biwenger y LaLiga Fantasy),
     no solo la de FANTASY_SOURCE — la app deja elegir la fuente desde la
@@ -270,6 +312,12 @@ def sync_all_sources() -> None:
             sync_once(get_data_source(nombre))
         except Exception:
             logger.exception("Fallo sincronizando la fuente %s — se salta y se sigue con las demás", nombre)
+
+    try:
+        with get_session() as session:
+            _propagar_estado_entre_fuentes(session)
+    except Exception:
+        logger.exception("Fallo propagando el estado físico entre fuentes")
 
 
 def run_scheduler() -> None:

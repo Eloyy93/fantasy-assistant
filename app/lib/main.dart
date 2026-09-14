@@ -724,9 +724,9 @@ class _CompareSlot extends StatelessWidget {
                 color: p == null ? kTextSecondary : Colors.white,
               ),
             ),
-            if (p != null && etiquetaEstadoJugador(p.estado) != null) ...[
+            if (p != null) ...[
               const SizedBox(height: 4),
-              PlayerStatusBadge(estado: p.estado),
+              PlayerStatusIcon(estado: p.estado, estadoInfo: p.estadoInfo),
             ],
           ],
         ),
@@ -745,8 +745,7 @@ class _CompareTable extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        if ((etiquetaEstadoJugador(a.estado) != null) || (etiquetaEstadoJugador(b.estado) != null))
-          _fila('Estado', etiquetaEstadoJugador(a.estado) ?? 'Disponible', etiquetaEstadoJugador(b.estado) ?? 'Disponible'),
+        _fila('Estado', etiquetaEstadoJugador(a.estado), etiquetaEstadoJugador(b.estado)),
         _fila('Precio', '${(a.precio / 1000000).toStringAsFixed(2)} M€', '${(b.precio / 1000000).toStringAsFixed(2)} M€'),
         _fila('Variación reciente', _variacionTexto(a.variacionPrecio), _variacionTexto(b.variacionPrecio)),
         _fila(
@@ -1719,10 +1718,8 @@ class _TeamPlayerCard extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    if (etiquetaEstadoJugador(jugador.estado) != null) ...[
-                      const SizedBox(width: 6),
-                      PlayerStatusBadge(estado: jugador.estado),
-                    ],
+                    const SizedBox(width: 6),
+                    PlayerStatusIcon(estado: jugador.estado, estadoInfo: jugador.estadoInfo),
                   ],
                 ),
                 const SizedBox(height: 2),
@@ -1961,10 +1958,8 @@ class _RecomendadoCard extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        if (etiquetaEstadoJugador(jugador.estado) != null) ...[
-                          const SizedBox(width: 6),
-                          PlayerStatusBadge(estado: jugador.estado),
-                        ],
+                        const SizedBox(width: 6),
+                        PlayerStatusIcon(estado: jugador.estado, estadoInfo: jugador.estadoInfo),
                       ],
                     ),
                     const SizedBox(height: 2),
@@ -2387,10 +2382,8 @@ class _CaptainCard extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    if (etiquetaEstadoJugador(candidato.estado) != null) ...[
-                      const SizedBox(width: 6),
-                      PlayerStatusBadge(estado: candidato.estado),
-                    ],
+                    const SizedBox(width: 6),
+                    PlayerStatusIcon(estado: candidato.estado, estadoInfo: candidato.estadoInfo),
                   ],
                 ),
                 const SizedBox(height: 2),
@@ -2796,10 +2789,8 @@ class _BargainCard extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    if (etiquetaEstadoJugador(chollo.estado) != null) ...[
-                      const SizedBox(width: 6),
-                      PlayerStatusBadge(estado: chollo.estado),
-                    ],
+                    const SizedBox(width: 6),
+                    PlayerStatusIcon(estado: chollo.estado, estadoInfo: chollo.estadoInfo),
                   ],
                 ),
                 const SizedBox(height: 2),
@@ -2918,10 +2909,8 @@ class _PlayerCard extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        if (etiquetaEstadoJugador(player.estado) != null) ...[
-                          const SizedBox(width: 6),
-                          PlayerStatusBadge(estado: player.estado),
-                        ],
+                        const SizedBox(width: 6),
+                        PlayerStatusIcon(estado: player.estado, estadoInfo: player.estadoInfo),
                       ],
                     ),
                     const SizedBox(height: 2),
@@ -3206,10 +3195,8 @@ class _PrediccionScreenState extends State<PrediccionScreen> {
                             '${(widget.player.precio / 1000000).toStringAsFixed(2)} M€',
                             style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
                           ),
-                          if (etiquetaEstadoJugador(widget.player.estado) != null) ...[
-                            const SizedBox(height: 8),
-                            PlayerStatusBadge(estado: widget.player.estado),
-                          ],
+                          const SizedBox(height: 8),
+                          PlayerStatusBadge(estado: widget.player.estado),
                         ],
                       ),
                     ),
@@ -3621,10 +3608,8 @@ class _LineupScreenState extends State<LineupScreen> {
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        if (etiquetaEstadoJugador(j.estado) != null) ...[
-                          const SizedBox(width: 6),
-                          PlayerStatusBadge(estado: j.estado),
-                        ],
+                        const SizedBox(width: 6),
+                        PlayerStatusIcon(estado: j.estado, estadoInfo: j.estadoInfo),
                       ],
                     ),
                     const SizedBox(height: 2),
