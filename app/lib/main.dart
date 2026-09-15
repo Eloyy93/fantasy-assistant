@@ -2017,6 +2017,8 @@ class _ImportarCapturaScreenState extends State<ImportarCapturaScreen> {
   bool _anadiendo = false;
   String? _error;
   List<CandidatoEscaneado>? _candidatos;
+  List<String>? _lineasTexto;
+  bool _mostrarTextoDetectado = false;
   final Set<String> _seleccionados = {};
 
   Future<void> _elegirImagen() async {
@@ -2059,6 +2061,7 @@ class _ImportarCapturaScreenState extends State<ImportarCapturaScreen> {
       _procesando = true;
       _error = null;
       _candidatos = null;
+      _lineasTexto = null;
       _seleccionados.clear();
     });
     try {
@@ -2073,6 +2076,7 @@ class _ImportarCapturaScreenState extends State<ImportarCapturaScreen> {
       if (!mounted) return;
       setState(() {
         _candidatos = candidatos;
+        _lineasTexto = lineasTexto;
         // Preselecciona solo las coincidencias más fiables — el resto
         // queda visible pero sin marcar, para que el usuario decida.
         _seleccionados.addAll(candidatos.where((c) => c.confianza >= 0.75).map((c) => c.jugador.id));
@@ -2199,6 +2203,27 @@ class _ImportarCapturaScreenState extends State<ImportarCapturaScreen> {
                       ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
                       : Text('Añadir ${_seleccionados.length} a la plantilla'),
                 ),
+              ],
+              if (_lineasTexto != null) ...[
+                const SizedBox(height: 20),
+                TextButton(
+                  onPressed: () => setState(() => _mostrarTextoDetectado = !_mostrarTextoDetectado),
+                  child: Text(_mostrarTextoDetectado ? 'Ocultar texto detectado' : 'Ver texto detectado (para depurar)'),
+                ),
+                if (_mostrarTextoDetectado)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: kSurfaceColor,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: kBorderColor),
+                    ),
+                    child: SelectableText(
+                      _lineasTexto!.isEmpty ? '(no se detectó ningún texto)' : _lineasTexto!.join('\n'),
+                      style: const TextStyle(color: kTextSecondary, fontSize: 12, fontFamily: 'monospace'),
+                    ),
+                  ),
               ],
             ],
             const SizedBox(height: 16),
