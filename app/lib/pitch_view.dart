@@ -173,28 +173,27 @@ class _ChipAvatar extends StatelessWidget {
             ),
           );
 
-    final incidencia = tieneIncidenciaFisica(estado);
-    if (!incidencia && esLocal == null) return foto;
-
     return Stack(
       clipBehavior: Clip.none,
       children: [
         foto,
-        if (incidencia)
-          Positioned(
-            right: -2,
-            bottom: -2,
-            child: Container(
-              padding: const EdgeInsets.all(2),
-              decoration: BoxDecoration(
-                color: colorForEstadoJugador(estado),
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.white, width: 1.5),
-                boxShadow: const [BoxShadow(color: Colors.black38, blurRadius: 3, offset: Offset(0, 1))],
-              ),
-              child: Icon(iconoEstadoJugador(estado), color: Colors.white, size: 12),
+        // El icono de estado se muestra siempre, no solo con lesión/duda —
+        // un tick verde de "disponible" es la confirmación visual de que
+        // el dato se ha comprobado, no solo una alarma para lo malo.
+        Positioned(
+          right: -2,
+          bottom: -2,
+          child: Container(
+            padding: const EdgeInsets.all(2),
+            decoration: BoxDecoration(
+              color: colorForEstadoJugador(estado),
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white, width: 1.5),
+              boxShadow: const [BoxShadow(color: Colors.black38, blurRadius: 3, offset: Offset(0, 1))],
             ),
+            child: Icon(iconoEstadoJugador(estado), color: Colors.white, size: 12),
           ),
+        ),
         if (esLocal != null)
           Positioned(
             left: -2,
