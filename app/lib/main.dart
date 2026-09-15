@@ -1090,6 +1090,10 @@ class _TeamScreenState extends State<TeamScreen> {
   String? _error;
   final _pitchKey = GlobalKey();
   bool _compartiendo = false;
+  // playerId -> juega en casa su próximo partido — se pide aparte y no
+  // bloquea la carga de la plantilla si tarda o falla (es un extra
+  // "bonito de tener", no algo de lo que dependa ver el equipo).
+  Map<String, bool> _localesPorId = {};
 
   @override
   void initState() {
@@ -1117,10 +1121,25 @@ class _TeamScreenState extends State<TeamScreen> {
       setState(() {
         _jugadores = resultados[0] as List<TeamPlayer>;
         _formacion = resultados[1] as String;
+        _localesPorId = {};
       });
+      _cargarLocales();
     } catch (e) {
       if (!mounted) return;
       setState(() => _error = 'No se pudo cargar la plantilla: $e');
+    }
+  }
+
+  Future<void> _cargarLocales() async {
+    final jugadores = _jugadores;
+    if (jugadores == null || jugadores.isEmpty) return;
+    try {
+      final mapa = await widget.api.getProximoRival(jugadores.map((j) => j.id).toList());
+      if (!mounted) return;
+      setState(() => _localesPorId = {for (final entry in mapa.entries) entry.key: entry.value.$2});
+    } catch (_) {
+      // Sin este dato el campo se ve igual que antes, solo sin el icono
+      // de casa/fuera — no merece la pena molestar al usuario por esto.
     }
   }
 
@@ -1494,6 +1513,7 @@ class _TeamScreenState extends State<TeamScreen> {
               asignados: r.asignados,
               onTapSlot: (slot) => _onTapSlot(slot, r.asignados[slot]),
               onDropSlot: _moverJugador,
+              localesPorId: _localesPorId,
             ),
           ),
           const SizedBox(height: 20),
@@ -1544,6 +1564,7 @@ class _TeamScreenState extends State<TeamScreen> {
                         asignados: r.asignados,
                         onTapSlot: (slot) => _onTapSlot(slot, r.asignados[slot]),
                         onDropSlot: _moverJugador,
+                        localesPorId: _localesPorId,
                       ),
                     ),
                   ),
@@ -3342,6 +3363,7 @@ class _LineupScreenState extends State<LineupScreen> {
   String? _error;
   final List<Player> _fijos = [];
   bool _importandoPlantilla = false;
+  Map<String, bool> _localesPorId = {};
 
   @override
   void dispose() {
@@ -3427,6 +3449,7 @@ class _LineupScreenState extends State<LineupScreen> {
       _loading = true;
       _error = null;
       _resultado = null;
+      _localesPorId = {};
     });
     try {
       final resultado = await widget.api.getLineup(
@@ -3437,11 +3460,24 @@ class _LineupScreenState extends State<LineupScreen> {
       );
       if (!mounted) return;
       setState(() => _resultado = resultado);
+      _cargarLocales(resultado.jugadores);
     } catch (e) {
       if (!mounted) return;
       setState(() => _error = '$e');
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _cargarLocales(List<LineupPlayer> jugadores) async {
+    if (jugadores.isEmpty) return;
+    try {
+      final mapa = await widget.api.getProximoRival(jugadores.map((j) => j.playerId).toList());
+      if (!mounted) return;
+      setState(() => _localesPorId = {for (final entry in mapa.entries) entry.key: entry.value.$2});
+    } catch (_) {
+      // Igual que en la plantilla: sin esto el campo se ve bien, solo sin
+      // el icono de casa/fuera.
     }
   }
 
@@ -3684,7 +3720,7 @@ class _LineupScreenState extends State<LineupScreen> {
           const SizedBox(height: 24),
           _statsRow(),
           const SizedBox(height: 16),
-          PitchView(jugadores: _resultado!.jugadores),
+          PitchView(jugadores: _resultado!.jugadores, localesPorId: _localesPorId),
           const SizedBox(height: 16),
           _aplicarBoton(),
           const SizedBox(height: 24),
@@ -3730,7 +3766,12 @@ class _LineupScreenState extends State<LineupScreen> {
                   const SizedBox(height: 16),
                   _statsRow(),
                   const SizedBox(height: 16),
-                  Expanded(child: FitAspectRatio(aspectRatio: 0.68, child: PitchView(jugadores: resultado.jugadores))),
+                  Expanded(
+                    child: FitAspectRatio(
+                      aspectRatio: 0.68,
+                      child: PitchView(jugadores: resultado.jugadores, localesPorId: _localesPorId),
+                    ),
+                  ),
                   const SizedBox(height: 16),
                   _aplicarBoton(),
                 ],

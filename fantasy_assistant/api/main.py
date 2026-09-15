@@ -33,6 +33,7 @@ from fantasy_assistant.api.schemas import (
     PlayerHistorialOut,
     PlayerOut,
     PrediccionOut,
+    ProximoRivalOut,
     RivalAnalysisOut,
     SubscriptionIn,
     TeamMemberIn,
@@ -311,6 +312,31 @@ def _build_compare_player(db: Session, player_id: str) -> ComparePlayerOut:
 @app.get("/compare", response_model=CompareOut)
 def compare_players(a: str = Query(...), b: str = Query(...), db: Session = Depends(get_db)) -> CompareOut:
     return CompareOut(a=_build_compare_player(db, a), b=_build_compare_player(db, b))
+
+
+@app.get("/jugadores/proximo-rival", response_model=list[ProximoRivalOut])
+def proximo_rival_batch(ids: str = Query(..., description="IDs separados por comas"), db: Session = Depends(get_db)) -> list[ProximoRivalOut]:
+    # Local/visitante del próximo partido: se pide bajo demanda para los
+    # jugadores que se están mostrando (el campo de la plantilla/alineación,
+    # normalmente 11-18) en vez de durante la sincronización periódica de
+    # TODO el mercado — cada jugador es una petición extra a la fuente, y
+    # hacerlo para cientos de jugadores en cada sync ya nos dio problemas de
+    # rate-limit/timeouts con Biwenger en el pasado.
+    player_ids = [p.strip() for p in ids.split(",") if p.strip()]
+    resultado: list[ProximoRivalOut] = []
+    for player_id in player_ids:
+        player = db.get(PlayerRecord, player_id)
+        if not player:
+            continue
+        try:
+            analisis = get_data_source(player.source).get_rival_analysis(player.external_id)
+        except Exception:
+            logger.warning("No se pudo obtener el próximo rival de %s", player_id, exc_info=True)
+            analisis = None
+        if analisis is None:
+            continue
+        resultado.append(ProximoRivalOut(player_id=player_id, rival=analisis.rival, casa=analisis.casa))
+    return resultado
 
 
 @app.post("/devices", status_code=201)

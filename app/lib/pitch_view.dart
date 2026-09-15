@@ -54,8 +54,13 @@ class _PitchPainter extends CustomPainter {
 class PitchView extends StatelessWidget {
   final List<LineupPlayer> jugadores;
   final void Function(LineupPlayer)? onTapPlayer;
+  // playerId -> juega en casa (true) o fuera (false) su próximo partido;
+  // los que no están en el mapa simplemente no muestran el icono (el dato
+  // se pide aparte, bajo demanda, y puede no estar disponible o no haber
+  // llegado todavía).
+  final Map<String, bool> localesPorId;
 
-  const PitchView({super.key, required this.jugadores, this.onTapPlayer});
+  const PitchView({super.key, required this.jugadores, this.onTapPlayer, this.localesPorId = const {}});
 
   List<LineupPlayer> _porPosicion(String posicion) =>
       jugadores.where((j) => j.posicion == posicion).toList();
@@ -97,7 +102,10 @@ class PitchView extends StatelessWidget {
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                           crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [for (final jugador in fila) _PlayerChip(jugador: jugador, onTap: onTapPlayer)],
+                          children: [
+                            for (final jugador in fila)
+                              _PlayerChip(jugador: jugador, onTap: onTapPlayer, esLocal: localesPorId[jugador.playerId]),
+                          ],
                         ),
                       ),
                   ],
@@ -125,8 +133,9 @@ class _ChipAvatar extends StatelessWidget {
   final String fotoUrl;
   final String posicion;
   final String estado;
+  final bool? esLocal;
 
-  const _ChipAvatar({required this.fotoUrl, required this.posicion, this.estado = 'ok'});
+  const _ChipAvatar({required this.fotoUrl, required this.posicion, this.estado = 'ok', this.esLocal});
 
   Widget _fallback() => Container(
         width: kChipAvatarSize,
@@ -164,26 +173,47 @@ class _ChipAvatar extends StatelessWidget {
             ),
           );
 
-    if (!tieneIncidenciaFisica(estado)) return foto;
+    final incidencia = tieneIncidenciaFisica(estado);
+    if (!incidencia && esLocal == null) return foto;
 
     return Stack(
       clipBehavior: Clip.none,
       children: [
         foto,
-        Positioned(
-          right: -2,
-          bottom: -2,
-          child: Container(
-            padding: const EdgeInsets.all(2),
-            decoration: BoxDecoration(
-              color: colorForEstadoJugador(estado),
-              shape: BoxShape.circle,
-              border: Border.all(color: Colors.white, width: 1.5),
-              boxShadow: const [BoxShadow(color: Colors.black38, blurRadius: 3, offset: Offset(0, 1))],
+        if (incidencia)
+          Positioned(
+            right: -2,
+            bottom: -2,
+            child: Container(
+              padding: const EdgeInsets.all(2),
+              decoration: BoxDecoration(
+                color: colorForEstadoJugador(estado),
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 1.5),
+                boxShadow: const [BoxShadow(color: Colors.black38, blurRadius: 3, offset: Offset(0, 1))],
+              ),
+              child: Icon(iconoEstadoJugador(estado), color: Colors.white, size: 12),
             ),
-            child: Icon(iconoEstadoJugador(estado), color: Colors.white, size: 12),
           ),
-        ),
+        if (esLocal != null)
+          Positioned(
+            left: -2,
+            bottom: -2,
+            child: Container(
+              padding: const EdgeInsets.all(2),
+              decoration: BoxDecoration(
+                color: esLocal! ? kMintAccent : kTextTertiary,
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 1.5),
+                boxShadow: const [BoxShadow(color: Colors.black38, blurRadius: 3, offset: Offset(0, 1))],
+              ),
+              child: Icon(
+                esLocal! ? Icons.home_rounded : Icons.flight_takeoff_rounded,
+                color: Colors.black,
+                size: 12,
+              ),
+            ),
+          ),
       ],
     );
   }
@@ -192,8 +222,9 @@ class _ChipAvatar extends StatelessWidget {
 class _TeamPlayerChip extends StatelessWidget {
   final TeamPlayer jugador;
   final void Function(TeamPlayer)? onTap;
+  final bool? esLocal;
 
-  const _TeamPlayerChip({required this.jugador, this.onTap});
+  const _TeamPlayerChip({required this.jugador, this.onTap, this.esLocal});
 
   String _apellido(String nombre) {
     final partes = nombre.split(' ');
@@ -210,7 +241,7 @@ class _TeamPlayerChip extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _ChipAvatar(fotoUrl: jugador.fotoUrl, posicion: jugador.posicion, estado: jugador.estado),
+            _ChipAvatar(fotoUrl: jugador.fotoUrl, posicion: jugador.posicion, estado: jugador.estado, esLocal: esLocal),
             const SizedBox(height: 2),
             ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 78),
@@ -281,6 +312,7 @@ class FormationPitchView extends StatelessWidget {
   // arrastrar desactivado (ej. mientras no hay conexión con el
   // dispositivo).
   final void Function(DragJugador origen, String destino)? onDropSlot;
+  final Map<String, bool> localesPorId;
 
   const FormationPitchView({
     super.key,
@@ -288,6 +320,7 @@ class FormationPitchView extends StatelessWidget {
     required this.asignados,
     required this.onTapSlot,
     this.onDropSlot,
+    this.localesPorId = const {},
   });
 
   @override
@@ -335,6 +368,7 @@ class FormationPitchView extends StatelessWidget {
                                 jugador: asignados[slot],
                                 onTapSlot: onTapSlot,
                                 onDropSlot: onDropSlot,
+                                esLocal: asignados[slot] == null ? null : localesPorId[asignados[slot]!.id],
                               ),
                           ],
                         ),
@@ -404,13 +438,20 @@ class _DraggableSlot extends StatelessWidget {
   final TeamPlayer? jugador;
   final void Function(String slot) onTapSlot;
   final void Function(DragJugador origen, String destino)? onDropSlot;
+  final bool? esLocal;
 
-  const _DraggableSlot({required this.slot, required this.jugador, required this.onTapSlot, required this.onDropSlot});
+  const _DraggableSlot({
+    required this.slot,
+    required this.jugador,
+    required this.onTapSlot,
+    required this.onDropSlot,
+    this.esLocal,
+  });
 
   @override
   Widget build(BuildContext context) {
     final chip = jugador != null
-        ? _TeamPlayerChip(jugador: jugador!, onTap: (_) => onTapSlot(slot))
+        ? _TeamPlayerChip(jugador: jugador!, onTap: (_) => onTapSlot(slot), esLocal: esLocal)
         : _EmptySlotChip(posicion: posicionDeSlot(slot), onTap: () => onTapSlot(slot));
 
     if (onDropSlot == null) return chip;
@@ -426,7 +467,7 @@ class _DraggableSlot extends StatelessWidget {
                 data: (jugadorId: jugador!.id, origenSlot: slot),
                 feedback: Material(
                   color: Colors.transparent,
-                  child: Opacity(opacity: 0.85, child: _TeamPlayerChip(jugador: jugador!, onTap: null)),
+                  child: Opacity(opacity: 0.85, child: _TeamPlayerChip(jugador: jugador!, onTap: null, esLocal: esLocal)),
                 ),
                 childWhenDragging: Opacity(opacity: 0.3, child: chip),
                 child: chip,
@@ -446,8 +487,9 @@ class _DraggableSlot extends StatelessWidget {
 class _PlayerChip extends StatelessWidget {
   final LineupPlayer jugador;
   final void Function(LineupPlayer)? onTap;
+  final bool? esLocal;
 
-  const _PlayerChip({required this.jugador, this.onTap});
+  const _PlayerChip({required this.jugador, this.onTap, this.esLocal});
 
   String _apellido(String nombre) {
     final partes = nombre.split(' ');
@@ -464,7 +506,7 @@ class _PlayerChip extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _ChipAvatar(fotoUrl: jugador.fotoUrl, posicion: jugador.posicion, estado: jugador.estado),
+            _ChipAvatar(fotoUrl: jugador.fotoUrl, posicion: jugador.posicion, estado: jugador.estado, esLocal: esLocal),
             const SizedBox(height: 2),
             ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 78),

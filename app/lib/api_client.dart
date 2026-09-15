@@ -686,6 +686,23 @@ class FantasyApiClient {
     );
   }
 
+  /// Local/visitante del próximo partido de cada jugador — se pide bajo
+  /// demanda solo para los que se están mostrando (el campo de la
+  /// plantilla/alineación), no para todo el mercado, porque cada uno es
+  /// una petición extra a la fuente. Devuelve un mapa playerId -> (rival,
+  /// casa); los jugadores sin dato disponible simplemente no aparecen.
+  Future<Map<String, (String, bool)>> getProximoRival(List<String> ids) async {
+    if (ids.isEmpty) return {};
+    final uri = Uri.parse('$baseUrl/jugadores/proximo-rival').replace(queryParameters: {'ids': ids.join(',')});
+    final response = await http.get(uri).timeout(const Duration(seconds: 20));
+    if (response.statusCode != 200) return {};
+    final body = jsonDecode(utf8.decode(response.bodyBytes)) as List<dynamic>;
+    return {
+      for (final item in body.cast<Map<String, dynamic>>())
+        item['player_id'] as String: (item['rival'] as String, item['casa'] as bool),
+    };
+  }
+
   Future<void> clearTeam({required String deviceId, required String source}) async {
     final uri = Uri.parse('$baseUrl/team/clear').replace(
       queryParameters: {'device_id': deviceId, 'source': source},

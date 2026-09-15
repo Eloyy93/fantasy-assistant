@@ -35,6 +35,12 @@ class RivalAnalysisOut(BaseModel):
     media_previos: float | None = None
 
 
+class ProximoRivalOut(BaseModel):
+    player_id: str
+    rival: str
+    casa: bool
+
+
 class DeviceRegisterIn(BaseModel):
     fcm_token: str
     user_id: str | None = None
