@@ -111,17 +111,26 @@ class PitchView extends StatelessWidget {
   }
 }
 
-/// Círculo de 36px con foto del jugador (o el fallback de color+letra si no
-/// hay foto), con borde blanco y sombra — usado en los chips del campo.
+/// Tamaño del círculo con la foto del jugador en el campo — antes 36px,
+/// ampliado para aprovechar mejor el espacio del campo y que la foto se
+/// reconozca de un vistazo en vez de quedar diminuta.
+const kChipAvatarSize = 52.0;
+
+/// Círculo con foto del jugador (o el fallback de color+letra si no hay
+/// foto), con borde blanco y sombra — usado en los chips del campo. Si
+/// [estado] indica una incidencia física (lesión/duda/sanción), se añade
+/// una insignia en la esquina para que se vea sin tener que salir del
+/// campo a la lista — antes ese icono solo aparecía en las vistas de lista.
 class _ChipAvatar extends StatelessWidget {
   final String fotoUrl;
   final String posicion;
+  final String estado;
 
-  const _ChipAvatar({required this.fotoUrl, required this.posicion});
+  const _ChipAvatar({required this.fotoUrl, required this.posicion, this.estado = 'ok'});
 
   Widget _fallback() => Container(
-        width: 36,
-        height: 36,
+        width: kChipAvatarSize,
+        height: kChipAvatarSize,
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: colorForPosicion(posicion),
@@ -129,29 +138,53 @@ class _ChipAvatar extends StatelessWidget {
           border: Border.all(color: Colors.white, width: 1.5),
           boxShadow: const [BoxShadow(color: Colors.black38, blurRadius: 4, offset: Offset(0, 2))],
         ),
-        child: Text(posicion, style: const TextStyle(color: Colors.black, fontSize: 9, fontWeight: FontWeight.w800)),
+        child: Text(posicion, style: const TextStyle(color: Colors.black, fontSize: 12, fontWeight: FontWeight.w800)),
       );
 
   @override
   Widget build(BuildContext context) {
-    if (fotoUrl.isEmpty) return _fallback();
-    return Container(
-      width: 36,
-      height: 36,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        border: Border.all(color: Colors.white, width: 1.5),
-        boxShadow: const [BoxShadow(color: Colors.black38, blurRadius: 4, offset: Offset(0, 2))],
-      ),
-      child: ClipOval(
-        child: Image.network(
-          webSafePhotoUrl(fotoUrl),
-          fit: BoxFit.cover,
-          alignment: Alignment.topCenter,
-          errorBuilder: (_, _, _) => _fallback(),
-          loadingBuilder: (context, child, progress) => progress == null ? child : _fallback(),
+    final foto = fotoUrl.isEmpty
+        ? _fallback()
+        : Container(
+            width: kChipAvatarSize,
+            height: kChipAvatarSize,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white, width: 1.5),
+              boxShadow: const [BoxShadow(color: Colors.black38, blurRadius: 4, offset: Offset(0, 2))],
+            ),
+            child: ClipOval(
+              child: Image.network(
+                webSafePhotoUrl(fotoUrl),
+                fit: BoxFit.cover,
+                alignment: Alignment.topCenter,
+                errorBuilder: (_, _, _) => _fallback(),
+                loadingBuilder: (context, child, progress) => progress == null ? child : _fallback(),
+              ),
+            ),
+          );
+
+    if (!tieneIncidenciaFisica(estado)) return foto;
+
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        foto,
+        Positioned(
+          right: -2,
+          bottom: -2,
+          child: Container(
+            padding: const EdgeInsets.all(2),
+            decoration: BoxDecoration(
+              color: colorForEstadoJugador(estado),
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white, width: 1.5),
+              boxShadow: const [BoxShadow(color: Colors.black38, blurRadius: 3, offset: Offset(0, 1))],
+            ),
+            child: Icon(iconoEstadoJugador(estado), color: Colors.white, size: 12),
+          ),
         ),
-      ),
+      ],
     );
   }
 }
@@ -177,10 +210,10 @@ class _TeamPlayerChip extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _ChipAvatar(fotoUrl: jugador.fotoUrl, posicion: jugador.posicion),
+            _ChipAvatar(fotoUrl: jugador.fotoUrl, posicion: jugador.posicion, estado: jugador.estado),
             const SizedBox(height: 2),
             ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 68),
+              constraints: const BoxConstraints(maxWidth: 78),
               child: Text(
                 _apellido(jugador.nombre),
                 maxLines: 1,
@@ -334,15 +367,15 @@ class _EmptySlotChip extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 36,
-              height: 36,
+              width: kChipAvatarSize,
+              height: kChipAvatarSize,
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: Colors.white.withValues(alpha: 0.14),
                 shape: BoxShape.circle,
                 border: Border.all(color: Colors.white.withValues(alpha: 0.6), width: 1.5, style: BorderStyle.solid),
               ),
-              child: const Icon(Icons.add_rounded, color: Colors.white, size: 18),
+              child: const Icon(Icons.add_rounded, color: Colors.white, size: 24),
             ),
             const SizedBox(height: 2),
             Text(
@@ -431,10 +464,10 @@ class _PlayerChip extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _ChipAvatar(fotoUrl: jugador.fotoUrl, posicion: jugador.posicion),
+            _ChipAvatar(fotoUrl: jugador.fotoUrl, posicion: jugador.posicion, estado: jugador.estado),
             const SizedBox(height: 2),
             ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 68),
+              constraints: const BoxConstraints(maxWidth: 78),
               child: Text(
                 _apellido(jugador.nombre),
                 maxLines: 1,
