@@ -18,6 +18,10 @@ void main() {
     _jugador('9', 'Rubén García'),
     _jugador('10', 'Adrià Altimira'),
     _jugador('11', 'Edu Altozano'),
+    _jugador('13', 'Unai López'),
+    _jugador('14', 'Josan'),
+    _jugador('15', 'Juan Carlos Arana'),
+    _jugador('16', 'Ferran Jutglà'),
   ];
 
   test('tolera una letra confundida por el OCR (Rodrigo -> Rodrygo)', () {
@@ -78,6 +82,20 @@ void main() {
     final candidatos = emparejarJugadores(['A. Alti'], mercado);
     expect(candidatos.any((c) => c.jugador.id == '10'), isTrue);
     expect(candidatos.any((c) => c.jugador.id == '11'), isFalse);
+  });
+
+  test('ML Kit funde 3 jugadores en una línea; se separan por los puntos suspensivos', () {
+    final candidatos = emparejarJugadores(['Rubén G.. Unai Lop... Josan'], mercado);
+    final ids = candidatos.map((c) => c.jugador.id).toSet();
+    expect(ids.containsAll({'9', '13', '14'}), isTrue);
+  });
+
+  test('ML Kit funde 2 jugadores sin espacio entre ellos; se separan igual', () {
+    final candidatos = emparejarJugadores(['Carlos Es...Ferran J...'], mercado);
+    expect(candidatos.any((c) => c.jugador.id == '16'), isTrue);
+    // No debe colarse un jugador que solo comparte el nombre de pila con
+    // el fragmento roto "Carlos Es" de una etiqueta ajena a él.
+    expect(candidatos.any((c) => c.jugador.id == '15'), isFalse);
   });
 
   test('apellido ambiguo entre varios jugadores baja la confianza pero no los descarta', () {

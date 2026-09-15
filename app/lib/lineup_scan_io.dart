@@ -56,7 +56,20 @@ List<CandidatoEscaneado> emparejarJugadores(List<String> lineasTexto, List<Playe
 
   final candidatos = <String, CandidatoEscaneado>{};
 
-  for (final lineaOriginal in lineasTexto) {
+  // ML Kit no siempre da una línea de texto por jugador: cuando varias
+  // tarjetas quedan a la misma altura en la rejilla (ej. los tres del
+  // centro del campo, o dos delanteros seguidos), a veces las funde en
+  // una sola línea de texto — ej. "Rubén G.. Unai Lop... Josan" son en
+  // realidad TRES jugadores, no un nombre con espacios raros. La única
+  // pista fiable para separarlos es el propio punto suspensivo que la
+  // interfaz ya usa para marcar cada nombre cortado, así que cualquier
+  // línea se trocea primero por esos puntos antes de intentar casarla —
+  // cada trozo se procesa después exactamente igual que si hubiera sido
+  // su propia línea desde el principio (incluido el caso normal de una
+  // sola línea sin ningún punto, que no se trocea).
+  final lineasIndividuales = lineasTexto.expand(_dividirPorTruncamiento).toList();
+
+  for (final lineaOriginal in lineasIndividuales) {
     final normalizada = _normalizar(_quitarPuntosSuspensivos(lineaOriginal));
     if (normalizada.length < 3) continue;
 
@@ -247,6 +260,10 @@ int _distanciaEdicion(String a, String b) {
 bool _esRuidoNumerico(String p) {
   final digitos = p.replaceAll(RegExp(r'[^0-9]'), '').length;
   return digitos >= p.length - digitos;
+}
+
+List<String> _dividirPorTruncamiento(String linea) {
+  return linea.split(RegExp(r'\.{2,}|…')).map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
 }
 
 String _quitarPuntosSuspensivos(String texto) {
