@@ -14,6 +14,8 @@ void main() {
     _jugador('5', 'Altimira'),
     _jugador('6', 'Romero'),
     _jugador('7', 'Romero Segundo'),
+    _jugador('8', 'David Cárdenas'),
+    _jugador('9', 'Rubén García'),
   ];
 
   test('tolera una letra confundida por el OCR (Rodrigo -> Rodrygo)', () {
@@ -49,6 +51,16 @@ void main() {
   test('un código de equipo pegado al nombre no rompe la coincidencia (Alexander Sørloth RMA)', () {
     final candidatos = emparejarJugadores(['Alexander Sørloth RMA'], mercado);
     expect(candidatos.any((c) => c.jugador.id == '2'), isTrue);
+  });
+
+  test('inicial + apellido truncado con puntos suspensivos (D. Cárde...)', () {
+    final candidatos = emparejarJugadores(['D. Cárde...'], mercado);
+    expect(candidatos.any((c) => c.jugador.id == '8'), isTrue);
+  });
+
+  test('nombre de pila completo + inicial de apellido truncada (Rubén G...)', () {
+    final candidatos = emparejarJugadores(['Rubén G...'], mercado);
+    expect(candidatos.any((c) => c.jugador.id == '9'), isTrue);
   });
 
   test('apellido ambiguo entre varios jugadores baja la confianza pero no los descarta', () {

@@ -205,7 +205,19 @@ bool _prefijoCompatible(String palabraNombre, String prefijo) {
   if (palabraNombre.startsWith(prefijo)) return true;
   if (prefijo.length > palabraNombre.length) return false;
   final inicioNombre = palabraNombre.substring(0, prefijo.length);
-  return _distanciaEdicion(inicioNombre, prefijo) <= _tolerancia(prefijo.length);
+  return _distanciaEdicion(inicioNombre, prefijo) <= _toleranciaPrefijo(prefijo.length);
+}
+
+/// Tolerancia propia para prefijos truncados — algo más laxa que
+/// [_tolerancia]. Un prefijo ya es de por sí un trozo corto y específico
+/// (normalmente va acompañado del nombre de pila completo o su inicial
+/// en la misma línea, ver [_buscarCompatibles]), así que un error de OCR
+/// justo ahí no debería descartar al jugador con la misma facilidad que
+/// en una palabra completa.
+int _toleranciaPrefijo(int longitud) {
+  if (longitud <= 3) return 0;
+  if (longitud <= 6) return 1;
+  return 2;
 }
 
 /// Distancia de Levenshtein clásica (mínimo de sustituciones/inserciones/

@@ -2046,7 +2046,13 @@ class _ImportarCapturaScreenState extends State<ImportarCapturaScreen> {
     );
     if (origen == null) return;
 
-    final archivo = await ImagePicker().pickImage(source: origen, imageQuality: 90);
+    // Sin compresión: la captura ya es una imagen (no una foto de cámara)
+    // con texto muy pequeño en cada tarjeta — recomprimir a JPEG 90 antes
+    // de pasarla al OCR emborronaba justo esas etiquetas truncadas
+    // ("D. Cárde...", "A. Alti"...) y hacía que el reconocimiento de texto
+    // perdiera jugadores que sí estaban perfectamente legibles a simple
+    // vista.
+    final archivo = await ImagePicker().pickImage(source: origen, imageQuality: 100);
     if (archivo == null) return;
 
     setState(() {
