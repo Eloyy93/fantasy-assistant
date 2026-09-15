@@ -16,6 +16,8 @@ void main() {
     _jugador('7', 'Romero Segundo'),
     _jugador('8', 'David Cárdenas'),
     _jugador('9', 'Rubén García'),
+    _jugador('10', 'Adrià Altimira'),
+    _jugador('11', 'Edu Altozano'),
   ];
 
   test('tolera una letra confundida por el OCR (Rodrigo -> Rodrygo)', () {
@@ -61,6 +63,21 @@ void main() {
   test('nombre de pila completo + inicial de apellido truncada (Rubén G...)', () {
     final candidatos = emparejarJugadores(['Rubén G...'], mercado);
     expect(candidatos.any((c) => c.jugador.id == '9'), isTrue);
+  });
+
+  test('una línea de dos palabras no cuela con un jugador que solo comparte una (falso positivo real)', () {
+    // Bug real reportado: con "Pedro Bigas" en el mercado y una línea de
+    // dos palabras donde solo "Pedro" coincidía, se colaba como si fuera
+    // un 75% de confianza sin que "Bigas" apareciera por ningún lado.
+    final mercadoConPedroBigas = [...mercado, _jugador('12', 'Pedro Bigas')];
+    final candidatos = emparejarJugadores(['Pedro Otro'], mercadoConPedroBigas);
+    expect(candidatos.any((c) => c.jugador.id == '12'), isFalse);
+  });
+
+  test('prefijo corto no se confunde con un apellido distinto que empieza parecido (Alti vs Altozano)', () {
+    final candidatos = emparejarJugadores(['A. Alti'], mercado);
+    expect(candidatos.any((c) => c.jugador.id == '10'), isTrue);
+    expect(candidatos.any((c) => c.jugador.id == '11'), isFalse);
   });
 
   test('apellido ambiguo entre varios jugadores baja la confianza pero no los descarta', () {

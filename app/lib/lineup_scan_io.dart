@@ -148,12 +148,16 @@ List<Player> _buscarCompatibles(
 ) {
   if (palabrasCompletas.isEmpty && (prefijo == null || prefijo.length < 3)) return const [];
   // Se tolera como máximo UNA palabra de la línea (completa o el prefijo
-  // final) que no encaje con nada del nombre — texto pegado que el paso
-  // anterior no pudo filtrar por no ser numérico (ej. un código de
-  // equipo de 3 letras tipo "RMA" al final de la línea) no debería tirar
-  // por tierra el resto de la línea si las demás palabras sí encajan bien.
+  // final) que no encaje con nada del nombre — pero SOLO si la línea trae
+  // al menos otras DOS palabras que sí encajan. Con solo dos palabras en
+  // total (ej. "Pedro Bigas"), tolerar que una de las dos no encaje
+  // equivale a exigir solo la mitad del nombre — eso colaba jugadores que
+  // no tenían nada que ver, solo porque una palabra suelta coincidía por
+  // casualidad. Con tres o más (ej. "Alexander Sørloth RMA", donde "RMA"
+  // es ruido pegado al nombre real de dos palabras) sigue teniendo sentido
+  // tolerar una.
   final totalTokens = palabrasCompletas.length + (prefijo != null ? 1 : 0);
-  final tolerablesRuido = totalTokens >= 2 ? 1 : 0;
+  final tolerablesRuido = totalTokens >= 3 ? 1 : 0;
   final compatibles = <Player>[];
   for (final jugador in jugadores) {
     final palabrasNombre = palabrasPorJugador[jugador.id]!;
@@ -205,19 +209,14 @@ bool _prefijoCompatible(String palabraNombre, String prefijo) {
   if (palabraNombre.startsWith(prefijo)) return true;
   if (prefijo.length > palabraNombre.length) return false;
   final inicioNombre = palabraNombre.substring(0, prefijo.length);
-  return _distanciaEdicion(inicioNombre, prefijo) <= _toleranciaPrefijo(prefijo.length);
-}
-
-/// Tolerancia propia para prefijos truncados — algo más laxa que
-/// [_tolerancia]. Un prefijo ya es de por sí un trozo corto y específico
-/// (normalmente va acompañado del nombre de pila completo o su inicial
-/// en la misma línea, ver [_buscarCompatibles]), así que un error de OCR
-/// justo ahí no debería descartar al jugador con la misma facilidad que
-/// en una palabra completa.
-int _toleranciaPrefijo(int longitud) {
-  if (longitud <= 3) return 0;
-  if (longitud <= 6) return 1;
-  return 2;
+  // Se probó a dar más margen de tolerancia aquí que en una palabra
+  // completa, pensando que un prefijo corto necesitaba más ayuda frente a
+  // errores de OCR — al revés: un prefijo corto es AMBIGUO de por sí (más
+  // apellidos comparten sus primeras letras que la palabra entera), así
+  // que dar más margen todavía multiplicaba los falsos positivos (ej.
+  // "Alti" pasaba a confundirse con "Alto..." de otro jugador distinto).
+  // Se usa la misma tolerancia estricta que para una palabra completa.
+  return _distanciaEdicion(inicioNombre, prefijo) <= _tolerancia(prefijo.length);
 }
 
 /// Distancia de Levenshtein clásica (mínimo de sustituciones/inserciones/
