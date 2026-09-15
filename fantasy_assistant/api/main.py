@@ -314,6 +314,11 @@ def compare_players(a: str = Query(...), b: str = Query(...), db: Session = Depe
     return CompareOut(a=_build_compare_player(db, a), b=_build_compare_player(db, b))
 
 
+def _normalizar_nombre(nombre: str) -> str:
+    sin_acentos = unicodedata.normalize("NFKD", nombre).encode("ascii", "ignore").decode("ascii")
+    return sin_acentos.strip().lower()
+
+
 @app.get("/jugadores/proximo-rival", response_model=list[ProximoRivalOut])
 def proximo_rival_batch(ids: str = Query(..., description="IDs separados por comas"), db: Session = Depends(get_db)) -> list[ProximoRivalOut]:
     # Local/visitante del próximo partido: se pide bajo demanda para los
@@ -324,6 +329,18 @@ def proximo_rival_batch(ids: str = Query(..., description="IDs separados por com
     # rate-limit/timeouts con Biwenger en el pasado.
     player_ids = [p.strip() for p in ids.split(",") if p.strip()]
     resultado: list[ProximoRivalOut] = []
+
+    # LaLiga Fantasy no siempre trae el próximo rival en el texto que
+    # scrapeamos de futbolfantasy.com (a veces esa web no lo indica) — como
+    # es el mismo jugador real, se reutiliza el mismo mecanismo que ya
+    # usamos para compartir el estado de lesión entre fuentes (ver
+    # _propagar_estado_entre_fuentes en jobs/sync_data.py): si falta,
+    # buscar por nombre normalizado en Biwenger, que sí lo da siempre. Se
+    # calcula una sola vez para todo el lote en vez de por jugador.
+    biwenger_por_nombre: dict[str, list[PlayerRecord]] = {}
+    for candidato in db.execute(select(PlayerRecord).where(PlayerRecord.source == "biwenger")).scalars().all():
+        biwenger_por_nombre.setdefault(_normalizar_nombre(candidato.nombre), []).append(candidato)
+
     for player_id in player_ids:
         player = db.get(PlayerRecord, player_id)
         if not player:
@@ -333,6 +350,15 @@ def proximo_rival_batch(ids: str = Query(..., description="IDs separados por com
         except Exception:
             logger.warning("No se pudo obtener el próximo rival de %s", player_id, exc_info=True)
             analisis = None
+
+        if analisis is None and player.source != "biwenger":
+            coincidencias = biwenger_por_nombre.get(_normalizar_nombre(player.nombre)) or []
+            if len(coincidencias) == 1:
+                try:
+                    analisis = get_data_source("biwenger").get_rival_analysis(coincidencias[0].external_id)
+                except Exception:
+                    logger.warning("No se pudo obtener el próximo rival (vía Biwenger) de %s", player_id, exc_info=True)
+
         if analisis is None:
             continue
         resultado.append(ProximoRivalOut(player_id=player_id, rival=analisis.rival, casa=analisis.casa))
