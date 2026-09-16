@@ -8,6 +8,7 @@ from __future__ import annotations
 import datetime as dt
 import logging
 import unicodedata
+from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urlparse
 
 import requests
@@ -319,6 +320,24 @@ def _normalizar_nombre(nombre: str) -> str:
     return sin_acentos.strip().lower()
 
 
+def _analisis_para(player: PlayerRecord, biwenger_por_nombre: dict[str, list[PlayerRecord]]):
+    try:
+        analisis = get_data_source(player.source).get_rival_analysis(player.external_id)
+    except Exception:
+        logger.warning("No se pudo obtener el próximo rival de %s", player.id, exc_info=True)
+        analisis = None
+
+    if analisis is None and player.source != "biwenger":
+        coincidencias = biwenger_por_nombre.get(_normalizar_nombre(player.nombre)) or []
+        if len(coincidencias) == 1:
+            try:
+                analisis = get_data_source("biwenger").get_rival_analysis(coincidencias[0].external_id)
+            except Exception:
+                logger.warning("No se pudo obtener el próximo rival (vía Biwenger) de %s", player.id, exc_info=True)
+
+    return player.id, analisis
+
+
 @app.get("/jugadores/proximo-rival", response_model=list[ProximoRivalOut])
 def proximo_rival_batch(ids: str = Query(..., description="IDs separados por comas"), db: Session = Depends(get_db)) -> list[ProximoRivalOut]:
     # Local/visitante del próximo partido: se pide bajo demanda para los
@@ -328,7 +347,6 @@ def proximo_rival_batch(ids: str = Query(..., description="IDs separados por com
     # hacerlo para cientos de jugadores en cada sync ya nos dio problemas de
     # rate-limit/timeouts con Biwenger en el pasado.
     player_ids = [p.strip() for p in ids.split(",") if p.strip()]
-    resultado: list[ProximoRivalOut] = []
 
     # LaLiga Fantasy no siempre trae el próximo rival en el texto que
     # scrapeamos de futbolfantasy.com (a veces esa web no lo indica) — como
@@ -341,27 +359,22 @@ def proximo_rival_batch(ids: str = Query(..., description="IDs separados por com
     for candidato in db.execute(select(PlayerRecord).where(PlayerRecord.source == "biwenger")).scalars().all():
         biwenger_por_nombre.setdefault(_normalizar_nombre(candidato.nombre), []).append(candidato)
 
-    for player_id in player_ids:
-        player = db.get(PlayerRecord, player_id)
-        if not player:
-            continue
-        try:
-            analisis = get_data_source(player.source).get_rival_analysis(player.external_id)
-        except Exception:
-            logger.warning("No se pudo obtener el próximo rival de %s", player_id, exc_info=True)
-            analisis = None
+    jugadores = [db.get(PlayerRecord, player_id) for player_id in player_ids]
+    jugadores = [j for j in jugadores if j is not None]
 
-        if analisis is None and player.source != "biwenger":
-            coincidencias = biwenger_por_nombre.get(_normalizar_nombre(player.nombre)) or []
-            if len(coincidencias) == 1:
-                try:
-                    analisis = get_data_source("biwenger").get_rival_analysis(coincidencias[0].external_id)
-                except Exception:
-                    logger.warning("No se pudo obtener el próximo rival (vía Biwenger) de %s", player_id, exc_info=True)
-
-        if analisis is None:
-            continue
-        resultado.append(ProximoRivalOut(player_id=player_id, rival=analisis.rival, casa=analisis.casa))
+    # Cada jugador es una petición HTTP (a veces dos, con el fallback de
+    # arriba) a una fuente externa — hacerlas una a una para un campo de
+    # 11-18 jugadores tardaba tanto que el cliente (con su propio timeout)
+    # se rendía antes de que el backend terminara, así que nunca llegaba a
+    # verse el icono. En paralelo con un hilo por jugador, el tiempo total
+    # es el de la petición MÁS LENTA, no la suma de todas.
+    resultado: list[ProximoRivalOut] = []
+    if jugadores:
+        with ThreadPoolExecutor(max_workers=min(len(jugadores), 12)) as executor:
+            for player_id, analisis in executor.map(lambda p: _analisis_para(p, biwenger_por_nombre), jugadores):
+                if analisis is None:
+                    continue
+                resultado.append(ProximoRivalOut(player_id=player_id, rival=analisis.rival, casa=analisis.casa))
     return resultado
 
 

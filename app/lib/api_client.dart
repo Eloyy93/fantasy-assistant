@@ -694,7 +694,12 @@ class FantasyApiClient {
   Future<Map<String, (String, bool)>> getProximoRival(List<String> ids) async {
     if (ids.isEmpty) return {};
     final uri = Uri.parse('$baseUrl/jugadores/proximo-rival').replace(queryParameters: {'ids': ids.join(',')});
-    final response = await http.get(uri).timeout(const Duration(seconds: 20));
+    // El backend pide estos datos en paralelo (uno o dos scrapeos externos
+    // por jugador), pero 11-18 jugadores sigue pudiendo tardar más que el
+    // timeout corto de otras llamadas — antes 20s hacía que esto fallara
+    // en silencio para plantillas grandes de LaLiga Fantasy (scrapeo más
+    // lento que la API de Biwenger) antes de que el backend terminara.
+    final response = await http.get(uri).timeout(const Duration(seconds: 45));
     if (response.statusCode != 200) return {};
     final body = jsonDecode(utf8.decode(response.bodyBytes)) as List<dynamic>;
     return {
