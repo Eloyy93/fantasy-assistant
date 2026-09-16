@@ -210,6 +210,20 @@ class _DesktopShellState extends State<DesktopShell> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      // Solo en la web: la app Android no necesita
+                      // anunciarse a sí misma un enlace a Play Store.
+                      if (kIsWeb) ...[
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: OutlinedButton.icon(
+                            onPressed: abrirPlayStore,
+                            icon: const Icon(Icons.shop_rounded, size: 16),
+                            label: const Text('Descargar en Google Play', style: TextStyle(fontSize: 12)),
+                            style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 10)),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
                       TextButton.icon(
                         onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AccountScreen())),
                         icon: const Icon(Icons.account_circle_rounded, size: 18, color: kTextSecondary),
@@ -321,6 +335,14 @@ class _PlayerSearchScreenState extends State<PlayerSearchScreen> {
                 ],
               ),
               actions: [
+                // Solo en la web: la app Android no necesita anunciarse a
+                // sí misma un enlace a Play Store.
+                if (kIsWeb)
+                  IconButton(
+                    onPressed: abrirPlayStore,
+                    icon: const Icon(Icons.shop_rounded),
+                    tooltip: 'Descargar en Google Play',
+                  ),
                 PopupMenuButton<String>(
                   icon: const Icon(Icons.menu_rounded),
                   tooltip: 'Menú',

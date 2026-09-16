@@ -14,3 +14,11 @@ Future<void> _abrir(String pagina) async {
 Future<void> abrirPrivacidad() => _abrir('privacidad.html');
 Future<void> abrirCookies() => _abrir('cookies.html');
 Future<void> abrirAvisoLegal() => _abrir('aviso-legal.html');
+
+const String kPlayStoreUrl =
+    'https://play.google.com/store/apps/details?id=com.eloy.fantasyassistant.fantasy_assistant_app';
+
+Future<void> abrirPlayStore() async {
+  final uri = Uri.parse(kPlayStoreUrl);
+  await launchUrl(uri, mode: LaunchMode.externalApplication, webOnlyWindowName: '_blank');
+}
