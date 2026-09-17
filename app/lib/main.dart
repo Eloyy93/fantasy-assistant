@@ -269,6 +269,7 @@ class _PlayerSearchScreenState extends State<PlayerSearchScreen> {
   List<Player> _players = [];
   bool _loading = false;
   String? _error;
+  Map<String, bool> _localesPorId = {};
 
   @override
   void dispose() {
@@ -296,11 +297,24 @@ class _PlayerSearchScreenState extends State<PlayerSearchScreen> {
       final players = await _api.searchPlayers(query, source: _source);
       if (!mounted) return;
       setState(() => _players = players);
+      _cargarLocales(players);
     } catch (e) {
       if (!mounted) return;
       setState(() => _error = 'No se pudo conectar con el backend: $e');
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _cargarLocales(List<Player> players) async {
+    if (players.isEmpty) return;
+    try {
+      final mapa = await _api.getProximoRival(players.map((p) => p.id).toList());
+      if (!mounted) return;
+      setState(() => _localesPorId = {for (final entry in mapa.entries) entry.key: entry.value.$2});
+    } catch (_) {
+      // Extra "bonito de tener" — sin esto la lista se ve igual, solo sin
+      // el icono de casa/fuera.
     }
   }
 
@@ -504,6 +518,7 @@ class _PlayerSearchScreenState extends State<PlayerSearchScreen> {
           final player = _players[index];
           return _PlayerCard(
             player: player,
+            esLocal: _localesPorId[player.id],
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => PrediccionScreen(player: player, api: _api)),
             ),
@@ -519,6 +534,7 @@ class _PlayerSearchScreenState extends State<PlayerSearchScreen> {
           final player = _players[index];
           return _PlayerCard(
             player: player,
+            esLocal: _localesPorId[player.id],
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => PrediccionScreen(player: player, api: _api)),
             ),
@@ -668,12 +684,16 @@ class _CompareScreenState extends State<CompareScreen> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Expanded(child: _CompareSlot(player: _jugadorA, onTap: () => _elegir(true))),
+              Expanded(
+                child: _CompareSlot(player: _jugadorA, onTap: () => _elegir(true), esLocal: _resultado?.$1.analisisRival?.casa),
+              ),
               const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 10),
                 child: Text('VS', style: TextStyle(fontWeight: FontWeight.w800, color: kTextTertiary)),
               ),
-              Expanded(child: _CompareSlot(player: _jugadorB, onTap: () => _elegir(false))),
+              Expanded(
+                child: _CompareSlot(player: _jugadorB, onTap: () => _elegir(false), esLocal: _resultado?.$2.analisisRival?.casa),
+              ),
             ],
           ),
           const SizedBox(height: 24),
@@ -696,8 +716,9 @@ class _CompareScreenState extends State<CompareScreen> {
 class _CompareSlot extends StatelessWidget {
   final Player? player;
   final VoidCallback onTap;
+  final bool? esLocal;
 
-  const _CompareSlot({required this.player, required this.onTap});
+  const _CompareSlot({required this.player, required this.onTap, this.esLocal});
 
   @override
   Widget build(BuildContext context) {
@@ -742,7 +763,7 @@ class _CompareSlot extends StatelessWidget {
             ),
             if (p != null) ...[
               const SizedBox(height: 4),
-              PlayerStatusIcon(estado: p.estado, estadoInfo: p.estadoInfo),
+              PlayerStatusIcon(estado: p.estado, estadoInfo: p.estadoInfo, esLocal: esLocal),
             ],
           ],
         ),
@@ -1664,14 +1685,25 @@ class _TeamScreenState extends State<TeamScreen> {
                     color: Colors.transparent,
                     child: SizedBox(
                       width: 260,
-                      child: Opacity(opacity: 0.9, child: _TeamPlayerCard(jugador: jugador, onQuitar: () {})),
+                      child: Opacity(
+                        opacity: 0.9,
+                        child: _TeamPlayerCard(jugador: jugador, onQuitar: () {}, esLocal: _localesPorId[jugador.id]),
+                      ),
                     ),
                   ),
                   childWhenDragging: Opacity(
                     opacity: 0.3,
-                    child: _TeamPlayerCard(jugador: jugador, onQuitar: () => _quitarDelEquipo(jugador)),
+                    child: _TeamPlayerCard(
+                      jugador: jugador,
+                      onQuitar: () => _quitarDelEquipo(jugador),
+                      esLocal: _localesPorId[jugador.id],
+                    ),
                   ),
-                  child: _TeamPlayerCard(jugador: jugador, onQuitar: () => _quitarDelEquipo(jugador)),
+                  child: _TeamPlayerCard(
+                    jugador: jugador,
+                    onQuitar: () => _quitarDelEquipo(jugador),
+                    esLocal: _localesPorId[jugador.id],
+                  ),
                 ),
                 const SizedBox(height: 10),
               ],
@@ -1718,8 +1750,9 @@ class _FormationSelector extends StatelessWidget {
 class _TeamPlayerCard extends StatelessWidget {
   final TeamPlayer jugador;
   final VoidCallback onQuitar;
+  final bool? esLocal;
 
-  const _TeamPlayerCard({required this.jugador, required this.onQuitar});
+  const _TeamPlayerCard({required this.jugador, required this.onQuitar, this.esLocal});
 
   @override
   Widget build(BuildContext context) {
@@ -1756,7 +1789,7 @@ class _TeamPlayerCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 6),
-                    PlayerStatusIcon(estado: jugador.estado, estadoInfo: jugador.estadoInfo),
+                    PlayerStatusIcon(estado: jugador.estado, estadoInfo: jugador.estadoInfo, esLocal: esLocal),
                   ],
                 ),
                 const SizedBox(height: 2),
@@ -1829,6 +1862,7 @@ class _PlayerPickerSheetState extends State<_PlayerPickerSheet> {
   bool _loadingRecomendados = false;
   bool _loadingBusqueda = false;
   bool _buscando = false;
+  Map<String, bool> _localesPorId = {};
 
   @override
   void initState() {
@@ -1853,10 +1887,23 @@ class _PlayerPickerSheetState extends State<_PlayerPickerSheet> {
       );
       if (!mounted) return;
       setState(() => _recomendados = recomendados);
+      _cargarLocales(recomendados);
     } catch (_) {
       // silencioso: si falla, el usuario siempre puede usar el buscador
     } finally {
       if (mounted) setState(() => _loadingRecomendados = false);
+    }
+  }
+
+  Future<void> _cargarLocales(List<TeamPlayer> recomendados) async {
+    if (recomendados.isEmpty) return;
+    try {
+      final mapa = await widget.api.getProximoRival(recomendados.map((r) => r.id).toList());
+      if (!mounted) return;
+      setState(() => _localesPorId = {for (final entry in mapa.entries) entry.key: entry.value.$2});
+    } catch (_) {
+      // Extra "bonito de tener" — sin esto la lista se ve igual, solo sin
+      // el icono de casa/fuera.
     }
   }
 
@@ -1937,6 +1984,7 @@ class _PlayerPickerSheetState extends State<_PlayerPickerSheet> {
                           for (final jugador in _recomendados) ...[
                             _RecomendadoCard(
                               jugador: jugador,
+                              esLocal: _localesPorId[jugador.id],
                               onTap: () => Navigator.of(context).pop(
                                 Player(
                                   id: jugador.id,
@@ -1964,8 +2012,9 @@ class _PlayerPickerSheetState extends State<_PlayerPickerSheet> {
 class _RecomendadoCard extends StatelessWidget {
   final TeamPlayer jugador;
   final VoidCallback onTap;
+  final bool? esLocal;
 
-  const _RecomendadoCard({required this.jugador, required this.onTap});
+  const _RecomendadoCard({required this.jugador, required this.onTap, this.esLocal});
 
   @override
   Widget build(BuildContext context) {
@@ -1996,7 +2045,7 @@ class _RecomendadoCard extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 6),
-                        PlayerStatusIcon(estado: jugador.estado, estadoInfo: jugador.estadoInfo),
+                        PlayerStatusIcon(estado: jugador.estado, estadoInfo: jugador.estadoInfo, esLocal: esLocal),
                       ],
                     ),
                     const SizedBox(height: 2),
@@ -2341,6 +2390,7 @@ class _CaptainScreenState extends State<CaptainScreen> {
   List<CaptainCandidate>? _candidatos;
   bool _loading = true;
   String? _error;
+  Map<String, bool> _localesPorId = {};
 
   @override
   void initState() {
@@ -2357,11 +2407,24 @@ class _CaptainScreenState extends State<CaptainScreen> {
       final candidatos = await widget.api.getCapitan(deviceId: widget.deviceId, source: widget.source);
       if (!mounted) return;
       setState(() => _candidatos = candidatos);
+      _cargarLocales(candidatos);
     } catch (e) {
       if (!mounted) return;
       setState(() => _error = 'No se pudo calcular el capitán óptimo: $e');
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _cargarLocales(List<CaptainCandidate> candidatos) async {
+    if (candidatos.isEmpty) return;
+    try {
+      final mapa = await widget.api.getProximoRival(candidatos.map((c) => c.id).toList());
+      if (!mounted) return;
+      setState(() => _localesPorId = {for (final entry in mapa.entries) entry.key: entry.value.$2});
+    } catch (_) {
+      // Extra "bonito de tener" — sin esto la pantalla se ve igual, solo
+      // sin el icono de casa/fuera.
     }
   }
 
@@ -2395,7 +2458,7 @@ class _CaptainScreenState extends State<CaptainScreen> {
                 ),
               ),
             for (var i = 0; i < candidatos.length; i++) ...[
-              _CaptainCard(candidato: candidatos[i], top: i == 0),
+              _CaptainCard(candidato: candidatos[i], top: i == 0, esLocal: _localesPorId[candidatos[i].id]),
               const SizedBox(height: 10),
             ],
             const SizedBox(height: 16),
@@ -2410,8 +2473,9 @@ class _CaptainScreenState extends State<CaptainScreen> {
 class _CaptainCard extends StatelessWidget {
   final CaptainCandidate candidato;
   final bool top;
+  final bool? esLocal;
 
-  const _CaptainCard({required this.candidato, required this.top});
+  const _CaptainCard({required this.candidato, required this.top, this.esLocal});
 
   @override
   Widget build(BuildContext context) {
@@ -2451,7 +2515,7 @@ class _CaptainCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 6),
-                    PlayerStatusIcon(estado: candidato.estado, estadoInfo: candidato.estadoInfo),
+                    PlayerStatusIcon(estado: candidato.estado, estadoInfo: candidato.estadoInfo, esLocal: esLocal),
                   ],
                 ),
                 const SizedBox(height: 2),
@@ -2703,6 +2767,7 @@ class _BargainsScreenState extends State<BargainsScreen> {
   String? _error;
   bool _notificar = false;
   bool _loadingPref = currentFcmToken != null;
+  Map<String, bool> _localesPorId = {};
 
   @override
   void initState() {
@@ -2725,11 +2790,24 @@ class _BargainsScreenState extends State<BargainsScreen> {
       final chollos = await widget.api.getBargains(source: _source);
       if (!mounted) return;
       setState(() => _chollos = chollos);
+      _cargarLocales(chollos);
     } catch (e) {
       if (!mounted) return;
       setState(() => _error = 'No se pudieron cargar los chollos: $e');
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _cargarLocales(List<Bargain> chollos) async {
+    if (chollos.isEmpty) return;
+    try {
+      final mapa = await widget.api.getProximoRival(chollos.map((c) => c.id).toList());
+      if (!mounted) return;
+      setState(() => _localesPorId = {for (final entry in mapa.entries) entry.key: entry.value.$2});
+    } catch (_) {
+      // Extra "bonito de tener" — sin esto la pantalla se ve igual, solo
+      // sin el icono de casa/fuera.
     }
   }
 
@@ -2815,7 +2893,7 @@ class _BargainsScreenState extends State<BargainsScreen> {
               child: Center(child: Text('No hay chollos claros ahora mismo', style: TextStyle(color: kTextSecondary))),
             ),
           for (final chollo in _chollos) ...[
-            _BargainCard(chollo: chollo),
+            _BargainCard(chollo: chollo, esLocal: _localesPorId[chollo.id]),
             const SizedBox(height: 10),
           ],
           const SizedBox(height: 16),
@@ -2828,8 +2906,9 @@ class _BargainsScreenState extends State<BargainsScreen> {
 
 class _BargainCard extends StatelessWidget {
   final Bargain chollo;
+  final bool? esLocal;
 
-  const _BargainCard({required this.chollo});
+  const _BargainCard({required this.chollo, this.esLocal});
 
   @override
   Widget build(BuildContext context) {
@@ -2858,7 +2937,7 @@ class _BargainCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 6),
-                    PlayerStatusIcon(estado: chollo.estado, estadoInfo: chollo.estadoInfo),
+                    PlayerStatusIcon(estado: chollo.estado, estadoInfo: chollo.estadoInfo, esLocal: esLocal),
                   ],
                 ),
                 const SizedBox(height: 2),
@@ -2943,8 +3022,9 @@ class _SourceToggle extends StatelessWidget {
 class _PlayerCard extends StatelessWidget {
   final Player player;
   final VoidCallback onTap;
+  final bool? esLocal;
 
-  const _PlayerCard({required this.player, required this.onTap});
+  const _PlayerCard({required this.player, required this.onTap, this.esLocal});
 
   @override
   Widget build(BuildContext context) {
@@ -2978,7 +3058,7 @@ class _PlayerCard extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 6),
-                        PlayerStatusIcon(estado: player.estado, estadoInfo: player.estadoInfo),
+                        PlayerStatusIcon(estado: player.estado, estadoInfo: player.estadoInfo, esLocal: esLocal),
                       ],
                     ),
                     const SizedBox(height: 2),
@@ -3264,7 +3344,7 @@ class _PrediccionScreenState extends State<PrediccionScreen> {
                             style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
                           ),
                           const SizedBox(height: 8),
-                          PlayerStatusBadge(estado: widget.player.estado),
+                          PlayerStatusBadge(estado: widget.player.estado, esLocal: _prediccion?.rival?.casa),
                         ],
                       ),
                     ),
@@ -3692,7 +3772,7 @@ class _LineupScreenState extends State<LineupScreen> {
                           ),
                         ),
                         const SizedBox(width: 6),
-                        PlayerStatusIcon(estado: j.estado, estadoInfo: j.estadoInfo),
+                        PlayerStatusIcon(estado: j.estado, estadoInfo: j.estadoInfo, esLocal: _localesPorId[j.playerId]),
                       ],
                     ),
                     const SizedBox(height: 2),

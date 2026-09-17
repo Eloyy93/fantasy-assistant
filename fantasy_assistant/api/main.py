@@ -208,16 +208,22 @@ def get_prediccion(player_id: str, db: Session = Depends(get_db)) -> PrediccionO
     if not player:
         raise HTTPException(status_code=404, detail=f"Jugador '{player_id}' no encontrado")
     result = price_predictor.predict_player(player_id)
+    # price_predictor calcula el rival aparte (usa su dificultad/histórico
+    # para la propia predicción de precio), pero para lo que necesita este
+    # endpoint (mostrarlo) se sustituye por la versión con caché + fallback
+    # a Biwenger por nombre — la de price_predictor no tiene ninguna de las
+    # dos, así que en LaLiga Fantasy fallaría más a menudo.
+    rival_analisis = _analisis_rival_para(db, player) or result.rival
     rival = (
         RivalAnalysisOut(
-            rival=result.rival.rival,
-            casa=result.rival.casa,
-            dificultad=result.rival.dificultad,
-            partidos_previos=result.rival.partidos_previos,
-            puntos_previos=result.rival.puntos_previos,
-            media_previos=result.rival.media_previos,
+            rival=rival_analisis.rival,
+            casa=rival_analisis.casa,
+            dificultad=rival_analisis.dificultad,
+            partidos_previos=rival_analisis.partidos_previos,
+            puntos_previos=rival_analisis.puntos_previos,
+            media_previos=rival_analisis.media_previos,
         )
-        if result.rival
+        if rival_analisis
         else None
     )
     return PrediccionOut(player_id=result.player_id, prediccion=result.prediccion, confianza=result.confianza, rival=rival)
@@ -271,14 +277,11 @@ def _build_compare_player(db: Session, player_id: str) -> ComparePlayerOut:
         )
     ).scalar_one()
 
-    try:
-        analisis = get_data_source(player.source).get_rival_analysis(player.external_id)
-    except Exception:
-        # El próximo rival es un extra "bonito de tener", no crítico — si
-        # falla la petición a la fuente (red, rate-limit...) el comparador
-        # sigue funcionando sin ese dato en vez de romperse entero.
-        logger.warning("No se pudo obtener el análisis de rival de %s", player_id, exc_info=True)
-        analisis = None
+    # El próximo rival es un extra "bonito de tener", no crítico — si falla
+    # la petición a la fuente (red, rate-limit...) el comparador sigue
+    # funcionando sin ese dato en vez de romperse entero. Usa la misma
+    # caché y el mismo fallback a Biwenger por nombre que /jugadores/proximo-rival.
+    analisis = _analisis_rival_para(db, player)
 
     proximo_rival = f"{analisis.rival} ({'Casa' if analisis.casa else 'Fuera'})" if analisis else None
     analisis_rival = (
@@ -347,6 +350,26 @@ def _rival_cacheado(source: str, external_id: str) -> RivalAnalysis | None:
         logger.warning("No se pudo obtener el próximo rival de %s:%s", source, external_id, exc_info=True)
         analisis = None
     _rival_cache[clave] = (ahora, analisis)
+    return analisis
+
+
+def _analisis_rival_para(db: Session, player: PlayerRecord) -> RivalAnalysis | None:
+    """Próximo rival de UN jugador suelto (compare, detalle...), con el
+    mismo fallback a Biwenger por nombre que usa el lote de /jugadores/
+    proximo-rival — aquí se calcula el índice de nombres al vuelo porque
+    solo se llama para uno o dos jugadores a la vez, no para un campo
+    entero."""
+    analisis = _rival_cacheado(player.source, player.external_id)
+    if analisis is not None or player.source == "biwenger":
+        return analisis
+    nombre_norm = _normalizar_nombre(player.nombre)
+    coincidencias = [
+        c
+        for c in db.execute(select(PlayerRecord).where(PlayerRecord.source == "biwenger")).scalars().all()
+        if _normalizar_nombre(c.nombre) == nombre_norm
+    ]
+    if len(coincidencias) == 1:
+        analisis = _rival_cacheado("biwenger", coincidencias[0].external_id)
     return analisis
 
 

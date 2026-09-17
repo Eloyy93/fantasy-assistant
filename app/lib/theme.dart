@@ -258,18 +258,39 @@ class PlayerStatusIcon extends StatelessWidget {
   final String estado;
   final String? estadoInfo;
   final double size;
+  // Local/visitante del próximo partido — null significa "aún no se ha
+  // pedido/no está disponible", que simplemente no dibuja el segundo
+  // icono en vez de mostrar un hueco o un error.
+  final bool? esLocal;
 
-  const PlayerStatusIcon({super.key, required this.estado, this.estadoInfo, this.size = 16});
+  const PlayerStatusIcon({super.key, required this.estado, this.estadoInfo, this.size = 16, this.esLocal});
 
   @override
   Widget build(BuildContext context) {
     final titulo = etiquetaEstadoJugador(estado);
     final info = estadoInfo?.trim();
     final mensaje = (info != null && info.isNotEmpty) ? '$titulo — $info' : titulo;
-    return Tooltip(
+    final iconoEstado = Tooltip(
       message: mensaje,
       triggerMode: TooltipTriggerMode.tap,
       child: Icon(iconoEstadoJugador(estado), color: colorForEstadoJugador(estado), size: size),
+    );
+    if (esLocal == null) return iconoEstado;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        iconoEstado,
+        SizedBox(width: size * 0.25),
+        Tooltip(
+          message: esLocal! ? 'Juega en casa' : 'Juega fuera',
+          triggerMode: TooltipTriggerMode.tap,
+          child: Icon(
+            esLocal! ? Icons.home_rounded : Icons.flight_takeoff_rounded,
+            color: esLocal! ? kMintAccent : kTextTertiary,
+            size: size,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -280,30 +301,67 @@ class PlayerStatusIcon extends StatelessWidget {
 /// (texto libre de la fuente) usa [PlayerStatusInfo] justo debajo.
 class PlayerStatusBadge extends StatelessWidget {
   final String estado;
+  final bool? esLocal;
 
-  const PlayerStatusBadge({super.key, required this.estado});
+  const PlayerStatusBadge({super.key, required this.estado, this.esLocal});
 
   @override
   Widget build(BuildContext context) {
     final color = colorForEstadoJugador(estado);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.16),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withValues(alpha: 0.35)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(iconoEstadoJugador(estado), color: color, size: 13),
-          const SizedBox(width: 4),
-          Text(
-            etiquetaEstadoJugador(estado),
-            style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.1),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.16),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: color.withValues(alpha: 0.35)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(iconoEstadoJugador(estado), color: color, size: 13),
+              const SizedBox(width: 4),
+              Text(
+                etiquetaEstadoJugador(estado),
+                style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.1),
+              ),
+            ],
+          ),
+        ),
+        if (esLocal != null) ...[
+          const SizedBox(width: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: (esLocal! ? kMintAccent : kTextTertiary).withValues(alpha: 0.16),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: (esLocal! ? kMintAccent : kTextTertiary).withValues(alpha: 0.35)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  esLocal! ? Icons.home_rounded : Icons.flight_takeoff_rounded,
+                  color: esLocal! ? kMintAccent : kTextTertiary,
+                  size: 13,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  esLocal! ? 'Casa' : 'Fuera',
+                  style: TextStyle(
+                    color: esLocal! ? kMintAccent : kTextTertiary,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.1,
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
-      ),
+      ],
     );
   }
 }
