@@ -267,40 +267,75 @@ def _normalizar_nombre(nombre: str) -> str:
     return sin_acentos.strip().lower()
 
 
+def _palabras_nombre(nombre: str) -> set[str]:
+    return set(_normalizar_nombre(nombre).split())
+
+
 def _propagar_estado_entre_fuentes(session) -> None:
     """El estado físico (lesionado/duda/sancionado + motivo/retorno
     estimado) es el mismo para el jugador real sea cual sea la fuente,
     pero solo Biwenger lo da — LaLiga Fantasy scrapea futbolfantasy.com,
     que no lo expone. En vez de duplicar el scraping en la otra fuente, se
-    copia aquí por nombre normalizado (sin acentos/mayúsculas) una vez que
-    ambas fuentes ya están sincronizadas.
+    copia aquí por nombre una vez que ambas fuentes ya están sincronizadas.
 
-    Si dos jugadores de Biwenger comparten el mismo nombre normalizado
-    (raro, pero pasa con apellidos comunes) se descarta ESE nombre entero
-    en vez de arriesgarse a copiar el estado de uno al otro — no tener el
-    dato es mejor que tener el equivocado."""
+    Dos pasadas, de más a menos estricta:
+    1. Nombre normalizado EXACTO (sin acentos/mayúsculas). Si dos
+       jugadores de Biwenger comparten el mismo nombre normalizado (raro,
+       pero pasa con apellidos comunes) se descarta ESE nombre entero en
+       vez de arriesgarse a copiar el estado de uno al otro.
+    2. Para los que no casaron así: Biwenger acorta a menudo el nombre a
+       solo el apellido mientras la otra fuente trae el nombre completo
+       (ej. Biwenger "El Hilali" vs LaLiga Fantasy "Omar El Hilali") — el
+       nombre normalizado exacto nunca coincide aunque sea evidentemente
+       el mismo jugador. Se prueba un emparejamiento más laxo (las
+       palabras de un nombre son subconjunto de las del otro) pero
+       acotado al MISMO EQUIPO para no confundir apellidos compartidos
+       entre clubes distintos, y solo si es la única coincidencia posible
+       dentro de ese equipo — no tener el dato es mejor que tener el
+       equivocado."""
     biwenger = session.execute(select(PlayerRecord).where(PlayerRecord.source == "biwenger")).scalars().all()
 
     candidatos: dict[str, list[PlayerRecord]] = {}
+    biwenger_por_equipo: dict[str, list[PlayerRecord]] = {}
     for p in biwenger:
         candidatos.setdefault(_normalizar_nombre(p.nombre), []).append(p)
+        biwenger_por_equipo.setdefault(_normalizar_nombre(p.equipo), []).append(p)
     estado_por_nombre = {
         nombre: (grupo[0].estado, grupo[0].estado_info) for nombre, grupo in candidatos.items() if len(grupo) == 1
     }
 
     otras_fuentes = session.execute(select(PlayerRecord).where(PlayerRecord.source != "biwenger")).scalars().all()
     actualizados = 0
+    actualizados_difuso = 0
     for p in otras_fuentes:
         match = estado_por_nombre.get(_normalizar_nombre(p.nombre))
-        if not match:
+        if match is not None:
+            estado, estado_info = match
+            if p.estado != estado or p.estado_info != estado_info:
+                p.estado, p.estado_info = estado, estado_info
+                actualizados += 1
             continue
-        estado, estado_info = match
-        if p.estado != estado or p.estado_info != estado_info:
-            p.estado, p.estado_info = estado, estado_info
-            actualizados += 1
+
+        palabras_p = _palabras_nombre(p.nombre)
+        mismo_equipo = biwenger_por_equipo.get(_normalizar_nombre(p.equipo)) or []
+        coincidencias = [
+            b for b in mismo_equipo if _palabras_nombre(b.nombre) <= palabras_p or palabras_p <= _palabras_nombre(b.nombre)
+        ]
+        if len(coincidencias) != 1:
+            continue
+        b = coincidencias[0]
+        if p.estado != b.estado or p.estado_info != b.estado_info:
+            p.estado, p.estado_info = b.estado, b.estado_info
+            actualizados_difuso += 1
+
     session.commit()
-    if actualizados:
-        logger.info("Estado físico propagado desde Biwenger a %d jugador(es) de otras fuentes", actualizados)
+    if actualizados or actualizados_difuso:
+        logger.info(
+            "Estado físico propagado desde Biwenger a %d jugador(es) de otras fuentes (%d por nombre exacto, %d por coincidencia parcial dentro del mismo equipo)",
+            actualizados + actualizados_difuso,
+            actualizados,
+            actualizados_difuso,
+        )
 
 
 def sync_all_sources() -> None:
