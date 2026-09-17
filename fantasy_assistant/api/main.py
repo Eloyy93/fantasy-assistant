@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import datetime as dt
 import logging
+import time
 import unicodedata
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urlparse
@@ -43,6 +44,7 @@ from fantasy_assistant.api.schemas import (
 )
 from fantasy_assistant.config import config
 from fantasy_assistant.datasources import SOURCES, get_data_source
+from fantasy_assistant.datasources.base import RivalAnalysis
 from fantasy_assistant.db.database import SessionLocal, init_db
 from fantasy_assistant.db.models import (
     DeviceRegistration,
@@ -320,20 +322,41 @@ def _normalizar_nombre(nombre: str) -> str:
     return sin_acentos.strip().lower()
 
 
-def _analisis_para(player: PlayerRecord, biwenger_por_nombre: dict[str, list[PlayerRecord]]):
+# Caché en memoria del próximo rival por (fuente, id externo) — el
+# próximo partido de un jugador no cambia salvo aplazamientos, así que no
+# hace falta scrapear la fuente en cada carga del campo. Primera versión
+# (hilos en paralelo pero sin caché) provocaba hasta 12 scrapeos
+# concurrentes en Railway CADA VEZ que alguien abría la plantilla/campo,
+# multiplicado por cada usuario a la vez — eso fue lo que causó la
+# lentitud y los crashes reportados. Con caché, solo el primer usuario
+# que pide un jugador dentro de la ventana de 3h paga el scrapeo real;
+# el resto (mismo u otros usuarios, cualquier pantalla) lo lee de aquí.
+_RIVAL_CACHE_TTL_SEGUNDOS = 3 * 60 * 60
+_rival_cache: dict[tuple[str, str], tuple[float, RivalAnalysis | None]] = {}
+
+
+def _rival_cacheado(source: str, external_id: str) -> RivalAnalysis | None:
+    clave = (source, external_id)
+    entrada = _rival_cache.get(clave)
+    ahora = time.monotonic()
+    if entrada is not None and ahora - entrada[0] < _RIVAL_CACHE_TTL_SEGUNDOS:
+        return entrada[1]
     try:
-        analisis = get_data_source(player.source).get_rival_analysis(player.external_id)
+        analisis = get_data_source(source).get_rival_analysis(external_id)
     except Exception:
-        logger.warning("No se pudo obtener el próximo rival de %s", player.id, exc_info=True)
+        logger.warning("No se pudo obtener el próximo rival de %s:%s", source, external_id, exc_info=True)
         analisis = None
+    _rival_cache[clave] = (ahora, analisis)
+    return analisis
+
+
+def _analisis_para(player: PlayerRecord, biwenger_por_nombre: dict[str, list[PlayerRecord]]):
+    analisis = _rival_cacheado(player.source, player.external_id)
 
     if analisis is None and player.source != "biwenger":
         coincidencias = biwenger_por_nombre.get(_normalizar_nombre(player.nombre)) or []
         if len(coincidencias) == 1:
-            try:
-                analisis = get_data_source("biwenger").get_rival_analysis(coincidencias[0].external_id)
-            except Exception:
-                logger.warning("No se pudo obtener el próximo rival (vía Biwenger) de %s", player.id, exc_info=True)
+            analisis = _rival_cacheado("biwenger", coincidencias[0].external_id)
 
     return player.id, analisis
 
@@ -362,15 +385,15 @@ def proximo_rival_batch(ids: str = Query(..., description="IDs separados por com
     jugadores = [db.get(PlayerRecord, player_id) for player_id in player_ids]
     jugadores = [j for j in jugadores if j is not None]
 
-    # Cada jugador es una petición HTTP (a veces dos, con el fallback de
-    # arriba) a una fuente externa — hacerlas una a una para un campo de
-    # 11-18 jugadores tardaba tanto que el cliente (con su propio timeout)
-    # se rendía antes de que el backend terminara, así que nunca llegaba a
-    # verse el icono. En paralelo con un hilo por jugador, el tiempo total
-    # es el de la petición MÁS LENTA, no la suma de todas.
+    # Con caché, en la práctica casi nunca se llega a lanzar más de un
+    # puñado de scrapeos reales a la vez (el resto son aciertos de caché,
+    # instantáneos) — se mantiene el paralelismo para esos pocos casos,
+    # pero con un límite bajo para no volver a saturar Railway si mucha
+    # gente refresca el mercado a la vez justo tras un despliegue (caché
+    # vacía).
     resultado: list[ProximoRivalOut] = []
     if jugadores:
-        with ThreadPoolExecutor(max_workers=min(len(jugadores), 12)) as executor:
+        with ThreadPoolExecutor(max_workers=min(len(jugadores), 4)) as executor:
             for player_id, analisis in executor.map(lambda p: _analisis_para(p, biwenger_por_nombre), jugadores):
                 if analisis is None:
                     continue
