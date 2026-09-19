@@ -1,8 +1,7 @@
 import 'package:flutter/widgets.dart';
 
-import 'adsense_sidebar_stub.dart' if (dart.library.html) 'adsense_sidebar_web.dart' as impl;
-
-/// Barra lateral de anuncio de AdSense para el diseño de escritorio de la
-/// versión web. En Android (o si por lo que sea no se resuelve la
-/// implementación web) no muestra nada.
-Widget buildAdsenseSidebar() => impl.buildAdsenseSidebar();
+/// Sin anuncios dentro de la app web: AdSense no permite servir anuncios en
+/// pantallas sin contenido editorial (buscadores, listas, formularios,
+/// estados vacíos), y toda la app es de ese tipo. Los anuncios de la web
+/// viven solo en las guías estáticas (/guias/).
+Widget buildAdsenseSidebar() => const SizedBox.shrink();

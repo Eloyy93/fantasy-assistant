@@ -225,6 +225,8 @@ class _DesktopShellState extends State<DesktopShell> {
                         label: const Text('Cuenta', style: TextStyle(fontSize: 13, color: kTextSecondary)),
                       ),
                       const SizedBox(height: 4),
+                      if (kIsWeb)
+                        TextButton(onPressed: abrirGuias, child: const Text('Guías', style: TextStyle(fontSize: 12, color: kTextTertiary))),
                       TextButton(onPressed: abrirPrivacidad, child: const Text('Privacidad', style: TextStyle(fontSize: 12, color: kTextTertiary))),
                       TextButton(onPressed: abrirCookies, child: const Text('Cookies', style: TextStyle(fontSize: 12, color: kTextTertiary))),
                       TextButton(onPressed: abrirAvisoLegal, child: const Text('Aviso legal', style: TextStyle(fontSize: 12, color: kTextTertiary))),
@@ -376,6 +378,8 @@ class _PlayerSearchScreenState extends State<PlayerSearchScreen> {
                         Navigator.of(context).push(MaterialPageRoute(builder: (_) => const NoAdsScreen()));
                       case 'notificaciones':
                         Navigator.of(context).push(MaterialPageRoute(builder: (_) => NotificationsScreen(api: _api)));
+                      case 'guias':
+                        abrirGuias();
                       case 'legal':
                         abrirAvisoLegal();
                     }
@@ -448,6 +452,15 @@ class _PlayerSearchScreenState extends State<PlayerSearchScreen> {
                         ),
                       ),
                     const PopupMenuDivider(),
+                    if (kIsWeb)
+                      const PopupMenuItem(
+                        value: 'guias',
+                        child: ListTile(
+                          leading: Icon(Icons.menu_book_rounded),
+                          title: Text('Guías de fantasy'),
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                      ),
                     const PopupMenuItem(
                       value: 'legal',
                       child: ListTile(

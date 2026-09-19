@@ -12,6 +12,10 @@ Future<void> _abrir(String pagina) async {
   await launchUrl(uri, mode: LaunchMode.externalApplication, webOnlyWindowName: '_blank');
 }
 
+Future<void> abrirGuias() async {
+  await launchUrl(Uri.parse('https://masterfantasy.es/guias/'), mode: LaunchMode.externalApplication, webOnlyWindowName: '_blank');
+}
+
 Future<void> abrirPrivacidad() => _abrir('privacidad.html');
 Future<void> abrirCookies() => _abrir('cookies.html');
 Future<void> abrirAvisoLegal() => _abrir('aviso-legal.html');

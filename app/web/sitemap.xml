@@ -2,22 +2,54 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://masterfantasy.es/</loc>
-    <changefreq>daily</changefreq>
     <priority>1.0</priority>
   </url>
   <url>
+    <loc>https://masterfantasy.es/guias/</loc>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://masterfantasy.es/guias/como-funcionan-los-precios.html</loc>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://masterfantasy.es/guias/como-elegir-capitan.html</loc>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://masterfantasy.es/guias/que-es-un-chollo.html</loc>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://masterfantasy.es/guias/mejores-formaciones.html</loc>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://masterfantasy.es/guias/lesiones-sanciones-y-dudas.html</loc>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://masterfantasy.es/guias/jugar-en-casa-o-fuera.html</loc>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://masterfantasy.es/guias/gestion-del-presupuesto.html</loc>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://masterfantasy.es/guias/errores-comunes-en-fantasy.html</loc>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://masterfantasy.es/legal/privacidad.html</loc>
-    <changefreq>yearly</changefreq>
     <priority>0.2</priority>
   </url>
   <url>
     <loc>https://masterfantasy.es/legal/cookies.html</loc>
-    <changefreq>yearly</changefreq>
     <priority>0.2</priority>
   </url>
   <url>
     <loc>https://masterfantasy.es/legal/aviso-legal.html</loc>
-    <changefreq>yearly</changefreq>
     <priority>0.2</priority>
   </url>
 </urlset>
